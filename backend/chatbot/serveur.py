@@ -119,10 +119,47 @@ NOTE_LIMITE = (
     "\n\n[Note du serveur : limite d'appels d'outils atteinte. N'appelle plus d'outil ; rédige "
     "maintenant la réponse finale, uniquement avec les résultats ci-dessus.]"
 )
-RAPPEL_OUTILS = (
-    "[Rappel du serveur] Tu n'as appelé aucun outil : ta réponse ne peut pas venir d'Hémicycle. "
-    "Appelle maintenant le ou les outils adaptés à la question, puis réponds à partir de leurs résultats."
-)
+# Recherche automatique : quand le modèle n'appelle aucun outil, le serveur interroge lui-même
+# Hémicycle avec les mots-clés de la question (mots vides et mots génériques retirés).
+MOTS_VIDES = frozenset("""
+a à ai au aux avec ce ces cet cette c ça d de des du dans donc elle elles en est et été être
+fait faire il ils je j l la le les leur leurs lui m ma mais me mes moi mon n ne ni nos notre nous
+on ont ou où par pas plus pour qu que quel quelle quelles quels qui quoi s sa sans se ses si son
+sont sous sur t ta te tes toi ton tous tout toute toutes tu un une vos votre vous y
+comment pourquoi quand combien est-ce y-a-t-il a-t-il
+actualité actualités actu info infos information informations nouvelle nouvelles nouveau neuf
+récent récente récents récentes récemment dernier dernière derniers dernières semaine mois jour
+aujourd hui hier ce-mois-ci cette-semaine sujet concernant propos point où-en état passé passe
+assemblée nationale parlement parlementaire parlementaires député députés hémicycle
+texte textes loi lois projet proposition données donnée beaucoup plein eu avoir y-a
+vote votes voté votée votés voter
+""".split())
+
+
+def mots_cles(question: str) -> str:
+    """Mots-clés d'une question pour la recherche automatique (au plus 6)."""
+    mots = re.findall(r"[a-zà-ÿœæç0-9-]+", question.lower().replace("’", " ").replace("'", " "))
+    utiles = [mot for mot in mots if len(mot) > 2 and mot not in MOTS_VIDES]
+    return " ".join(dict.fromkeys(utiles))[:120] if utiles else ""
+
+
+def appels_recherche_automatique(question: str) -> list[Any]:
+    """Appels d'outils lancés par le serveur quand le modèle n'en a appelé aucun."""
+    cles = mots_cles(question)
+    if cles:
+        specs = [("rechercher", {"q": cles, "limit": 5}), ("derniers_scrutins", {"recherche": cles, "limite": 5})]
+    else:  # question générale d'actualité (« quoi de neuf ? »)
+        specs = [("derniers_scrutins", {"limite": 8}), ("agenda_seances", {})]
+    return [
+        SimpleNamespace(
+            id=f"recherche_auto_{indice}",
+            type="function",
+            function=SimpleNamespace(name=nom, arguments=json.dumps(arguments, ensure_ascii=False)),
+        )
+        for indice, (nom, arguments) in enumerate(specs, start=1)
+    ]
+
+
 JOURS = ("lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche")
 MOIS = (
     "janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août",
@@ -934,29 +971,13 @@ async def repondre(etat: EtatServeur, question: str, historique: list[MessageHis
     latences: list[float] = []
     tokens = {"entree": 0, "sortie": 0}
     taille_reflexion = 0
-    relance_faite = False
+    recherche_auto = False
     appels_en_texte = 0
     reponse: ReponseChat | None = None
 
-    for _ in range(compteur.max_appels + 2):
-        avec_outils = not compteur.limite_atteinte
-        reponse = await _appeler_llm(etat, messages, etat.outils if avec_outils else None, reflexion)
-        appels_en_texte += getattr(reponse, "appels_en_texte", 0)
-        latences.append(round(reponse.duree_s, 1))
-        if reponse.usage:
-            tokens["entree"] += getattr(reponse.usage, "prompt_tokens", 0) or 0
-            tokens["sortie"] += getattr(reponse.usage, "completion_tokens", 0) or 0
-        taille_reflexion += len(reponse.reflexion or "")
-        if not reponse.appels_outils and not resultats and avec_outils and not relance_faite:
-            # Réponse sans aucun appel d'outil : elle ne peut pas être fondée sur Hémicycle.
-            # Une seule relance, avec un rappel explicite (sinon le garde-fou répondra « introuvable »).
-            relance_faite = True
-            messages.append({"role": "user", "content": RAPPEL_OUTILS})
-            continue
-        if not reponse.appels_outils or not avec_outils:
-            break
-        messages.append(reponse.message_assistant())
-        for tool_call in reponse.appels_outils:
+    async def executer_lot(appels: list[Any]) -> None:
+        """Exécute des appels d'outils et ajoute les messages `role: tool` à la conversation."""
+        for tool_call in appels:
             resultat, depuis_cache = await executer_appel(etat, tool_call, compteur)
             resultats.append(resultat)
             messages.append(resultat.message_openai())
@@ -967,9 +988,42 @@ async def repondre(etat: EtatServeur, question: str, historique: list[MessageHis
                 "credits": resultat.credits_factures or 0,
                 "nb_sources": len(resultat.sources),
                 "duree_s": resultat.duree_s,
+                "lance_par": "serveur" if str(tool_call.id).startswith("recherche_auto_") else "modele",
             })
         if compteur.limite_atteinte:
             messages[-1]["content"] += NOTE_LIMITE
+
+    for _ in range(compteur.max_appels + 2):
+        avec_outils = not compteur.limite_atteinte
+        reponse = await _appeler_llm(etat, messages, etat.outils if avec_outils else None, reflexion)
+        appels_en_texte += getattr(reponse, "appels_en_texte", 0)
+        latences.append(round(reponse.duree_s, 1))
+        if reponse.usage:
+            tokens["entree"] += getattr(reponse.usage, "prompt_tokens", 0) or 0
+            tokens["sortie"] += getattr(reponse.usage, "completion_tokens", 0) or 0
+        taille_reflexion += len(reponse.reflexion or "")
+        if not reponse.appels_outils and not resultats and avec_outils and not recherche_auto:
+            # Le modèle a répondu sans chercher : sa réponse ne peut pas venir d'Hémicycle.
+            # Le serveur lance lui-même la recherche avec les mots-clés de la question,
+            # puis redonne la main au modèle avec les résultats.
+            recherche_auto = True
+            appels = appels_recherche_automatique(question)
+            journal.info("Aucun outil appelé par le modèle : recherche automatique %s",
+                         [(a.function.name, a.function.arguments) for a in appels])
+            messages.append({
+                "role": "assistant", "content": None,
+                "tool_calls": [
+                    {"id": a.id, "type": "function",
+                     "function": {"name": a.function.name, "arguments": a.function.arguments}}
+                    for a in appels
+                ],
+            })
+            await executer_lot(appels)
+            continue
+        if not reponse.appels_outils or not avec_outils:
+            break
+        messages.append(reponse.message_assistant())
+        await executer_lot(reponse.appels_outils)
 
     texte, puces_coupees = limiter_puces(nettoyer_reponse(reponse.texte if reponse else ""))
     if reponse is not None and reponse.raison_fin == "length" and texte:
@@ -1038,7 +1092,7 @@ async def repondre(etat: EtatServeur, question: str, historique: list[MessageHis
             "tokens": tokens,
             "taille_reflexion": taille_reflexion,
             "garde_fou": garde_fou,
-            "relance_outils": relance_faite,
+            "recherche_automatique": recherche_auto,
             "appels_outils_en_texte": appels_en_texte,
             "credits_serveur": etat.credits_serveur,
         },
