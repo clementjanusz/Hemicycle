@@ -1,0 +1,26 @@
+﻿donnee,utilisee_dans_index_actuel,disponible_via_hemicycle,source_actuelle_ou_primaire,endpoint_hemicycle,affichage_possible,limite_editoriale
+Feu de Saumos : date et lieu,oui,non,Préfecture de Gironde,,Chronologie et fiche Gironde,Hémicycle indexe des documents parlementaires ; événement terrain externe
+Saumos : 42 000 ha parcourus,oui,non,Préfecture de Gironde,,Chiffre avec unité et date,Ne pas assimiler à la surface détruite
+Saumos : 37 296 ha détruits,oui,non,Préfecture de Gironde,,Chiffre avec unité et date,Ne pas assimiler au total départemental
+Périmètre géographique du feu de Saumos,non,non,Copernicus EFFIS à vérifier,,Couche cartographique réelle,Géométrie non encore collectée
+Limites des départements,oui,non,france-geojson,,Carte SVG,"Pour une version éditoriale finale, privilégier une source IGN"
+Superficie de chaque département,non,non,IGN à connecter,,Dénominateur du pourcentage brûlé,Indispensable avant choroplèthe en pourcentage
+Pourcentage de territoire brûlé par département,non,non,Calcul EFFIS + IGN,,Choroplèthe / comparateur,Ne peut être calculé avec le seul bilan de Saumos
+"Texte 3146 : titre, date, nature, auteur ID",oui,oui,Assemblée nationale,GET /textes/PIONANR5L17B3146,Carte de mesure,"Dans index actuel, valeur copiée de la source officielle, pas de l’API"
+"Texte 3156 : titre, date, nature, auteur ID",oui,oui,Assemblée nationale,GET /textes/PIONANR5L17B3156,Carte de mesure,"Dans index actuel, valeur copiée de la source officielle, pas de l’API"
+Texte 3402 : débroussaillement collectif,non,oui,Hémicycle / Assemblée nationale,GET /textes/PIONANR5L17B3402,Nouvelle carte de mesure,Proposition déposée le 27 octobre 2026 ; pas une loi
+Texte 3137 : répression des incendies volontaires,non,oui,Hémicycle / Assemblée nationale,GET /textes/PIONANR5L17B3137,Comparateur thématique,Proposition déposée ; pertinence éditoriale à qualifier
+Texte 3155 : pouvoirs des maires,non,oui,Hémicycle / Assemblée nationale,GET /textes/PIONANR5L17B3155,Comparateur thématique,Proposition déposée ; pertinence éditoriale à qualifier
+Dossier des textes 3146 et 3156,non,oui,Hémicycle / Assemblée nationale,GET /dossiers/{id},Pipeline législatif,"Les deux réponses examinées contiennent titre et procédure, pas une progression détaillée"
+Auteur du texte 3146 : Christelle D’Intorni,non,oui,Hémicycle / Assemblée nationale,GET /acteurs/PA793322,Fiche auteur,Identité confirmée via ID auteur du texte
+Auteur du texte 3156 : Pierre Cordier,non,oui,Hémicycle / Assemblée nationale,GET /acteurs/PA718850,Fiche auteur,Identité confirmée via ID auteur du texte
+"Amendement I-3339 : texte, sort, date, auteur",oui,oui,Assemblée nationale,GET /amendements/AMANR5L17PO838901B3210P1D1N003339,Carte de mesure et chronologie,Adopté en première lecture ; application non démontrée
+Auteur de I-3339 : Sophie Pantel,oui,oui,Assemblée nationale,GET /acteurs/PA841381,Fiche auteur,"Dans index actuel, valeur issue de la source officielle"
+"Amendement II-CL317 : Saumos, auteur, sort",non,oui,Hémicycle / Assemblée nationale,GET /amendements/AMANR5L17PO59051B3210P2D1N000317,Initiative locale documentée,Mathilde Feld ; non soutenu le 4 novembre 2026
+Mathilde Feld : identité,oui,oui,Assemblée nationale,GET /acteurs/PA841251,Fiche élue Gironde,Association territoriale vérifiée séparément sur le site de l’Assemblée
+Liste des députés élus en Gironde,oui,à vérifier,Assemblée nationale,,Annuaire local,GET /acteurs ne propose pas de filtre département documenté ; rattachement à construire
+Liste des sénateurs élus en Gironde,oui,à vérifier,Sénat,,Annuaire local,Couverture sénatoriale Hémicycle non vérifiée dans cet audit
+Votes nominatifs sur un scrutin pertinent,non,oui si scrutin trouvé,Hémicycle / Assemblée nationale,GET /scrutins/{id}/votes,Votes individuels et hémicycle,Aucun scrutin pertinent identifié par recherche incendie ; ne pas inventer
+Résultat par groupe sur un scrutin pertinent,non,oui si scrutin trouvé,Hémicycle / Assemblée nationale,GET /scrutins/{id}/resultat,Barres pour/contre/abstention,Nécessite un ID de scrutin pertinent
+Groupe politique et organes,partiel,oui,Assemblée nationale,GET /organes,Profil élu,Résoudre les identifiants d’organes et dates de mandat
+Impact humain et bâtiments détruits à Saumos,non,non,Préfecture de Gironde,,Contexte local sourcé,Ne pas reprendre les chiffres d’un exposé politique sans source terrain
