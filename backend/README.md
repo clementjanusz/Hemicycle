@@ -220,3 +220,24 @@ FEATHERLESS_MODEL=Qwen/Qwen3.8-27B .venv/bin/python serveur.py --reflexion
 Variables facultatives : `CHATBOT_REFLEXION` (0 par défaut ; 1 = réflexion de Qwen 3 activée, plus lent), `CHATBOT_MAX_CREDITS_QUESTION` (10), `CHATBOT_MAX_CREDITS_SERVEUR` (300), `CHATBOT_CACHE_S` (600), `CHATBOT_MAX_TOKENS` (900, sans réflexion), `CHATBOT_CONCURRENCE_LLM` (1), `CHATBOT_TRACE` (chemin d'un fichier JSONL : question, résultats d'outils vus par le modèle, réponse ; pour vérifier une réponse). Pour comparer, `POST /chat` accepte aussi `"reflexion": true|false`.
 
 Limites connues (détail dans [`TODO.md`](TODO.md#7-outil-de-rédaction-journalistes)) : réponses souvent plus longues que la cible de 80 mots ; avec la réflexion désactivée, `Qwen3.8-27B` écrit ses appels d'outils dans le texte (le serveur les récupère) et oublie parfois d'appeler un outil.
+
+## Chatbot du rapport (mode lecteur)
+
+Le même serveur sert aussi le chatbot intégré au rapport publié. Il suffit d'envoyer le numéro du rapport dans la requête :
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/chat -H 'Content-Type: application/json' \
+  -d '{"question": "Quel groupe est le plus divisé ce mois-ci ?", "mois": "demo"}'
+```
+
+| | Outil de rédaction (sans `mois`) | Chatbot du rapport (avec `mois`) |
+| --- | --- | --- |
+| Public | Journalistes de l'équipe | Lecteurs du rapport |
+| Sources | Hémicycle uniquement (outils MCP) | Le rapport du mois, puis Hémicycle en complément |
+| Outils | Outils Hémicycle | Outils Hémicycle + `lister_sections_rapport` + `surligner_section` |
+| Réponse | `reponse`, `sources`, `outils_utilises` | idem + `actions` (sections du rapport à mettre en évidence) |
+
+- **`surligner_section`** indique quelle partie du rapport répond à la question : la réponse de `/chat` contient alors `"actions": [{"type": "surligner_section", "section_id": "cohesion-des-groupes", "titre": "…", "raison": "…"}]`. Ce que la page devra en faire est décrit dans [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md) (à implémenter côté front).
+- Le rapport est lu dans `rapports/<mois>/rapport.md` ; `GET /api/rapport/<mois>` renvoie ses sections en JSON et `GET /api/rapports` la liste des numéros. `rapports/demo/` est un numéro de démonstration au contenu fictif.
+- Les outils du rapport sont gratuits ; une question traitée par le rapport seul ne coûte aucun crédit Hémicycle.
+- Testé le 14/11/2026 sur `demo` : « Quel groupe est le plus divisé ? » → `surligner_section(cohesion-des-groupes)`, réponse citant la section, 0 crédit, 13 s ; « Où en sont les textes sur les incendies de forêt ? » (hors rapport) → aucun surlignage, outils Hémicycle (`derniers_scrutins`, `rechercher`, `lire_texte` ×3), 6 crédits, 22 s.

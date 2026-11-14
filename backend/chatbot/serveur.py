@@ -53,6 +53,8 @@ from featherless_client import (
     ReponseChat,
     charger_config,
 )
+from outils_rapport import NumeroInvalide, OutilsRapport, RapportIntrouvable
+from routes_rapport import routeur as routeur_rapport
 from hemicycle_tools import (
     COUT_INCONNU,
     COUTS_CREDITS,
@@ -264,6 +266,20 @@ Forme de la réponse :
 - Chaque puce tient en une ligne (20 mots au plus) : la date (JJ/MM/AAAA), le fait, puis sa source entre parenthèses, par exemple « (scrutin n° 1234) », « (texte n° 567) » ou « (ordre du jour du JJ/MM/AAAA) ».
 - Chiffres et intitulés repris exactement des résultats d'outils. Ton neutre : ni opinion, ni qualificatif, ni pronostic.
 - Pas de liens : les sources sont affichées à part."""
+
+
+def prompt_lecteur(rapport: OutilsRapport) -> str:
+    """Complément du prompt pour le chatbot du rapport (requête avec un `mois`)."""
+    return (
+        "\n\nMODE LECTEUR DU RAPPORT — ces règles complètent et remplacent les précédentes quand elles diffèrent.\n"
+        "Tu réponds à un lecteur du rapport mensuel ci-dessous, publié par la rédaction à partir des données "
+        "d'Hémicycle. Un fait peut venir du texte du rapport ci-dessous OU d'un résultat d'outil Hémicycle de "
+        "cette conversation ; jamais de tes connaissances propres. Si la question porte sur un sujet traité dans "
+        "le rapport, réponds d'abord avec le rapport, sans appeler les outils Hémicycle. Sinon, utilise les outils "
+        "Hémicycle et précise que l'information vient d'Hémicycle et n'a pas été vérifiée par la rédaction.\n\n"
+        "Rapport du mois (chaque section est précédée de son identifiant entre crochets) :\n\n"
+        + rapport.rapport.texte_pour_prompt() + "\n\n" + rapport.consigne_prompt()
+    )
 
 
 # --------------------------------------------------------------------------
@@ -914,7 +930,8 @@ async def executer_appel(etat: EtatServeur, tool_call: Any, compteur: CompteurCo
 
 
 async def _appeler_llm(etat: EtatServeur, messages: list[dict[str, Any]],
-                       outils: list[dict[str, Any]] | None, reflexion: bool) -> ReponseChat:
+                       outils: list[dict[str, Any]] | None, reflexion: bool,
+                       schemas_extra: dict[str, set[str]] | None = None) -> ReponseChat:
     options = {
         "outils": outils,
         "sans_reflexion": not reflexion,
@@ -927,7 +944,7 @@ async def _appeler_llm(etat: EtatServeur, messages: list[dict[str, Any]],
             journal.warning("Sortie de modération au lieu d'une réponse (requête %s) : nouvel essai.", reponse.id_requete)
             reponse = await etat.llm.discuter(messages, **options)
     if outils and not reponse.appels_outils and "<tool_call>" in reponse.texte:
-        appels = appels_outils_en_texte(reponse.texte, etat.schemas)
+        appels = appels_outils_en_texte(reponse.texte, {**etat.schemas, **(schemas_extra or {})})
         if appels:
             journal.info("Appels d'outils écrits en texte, récupérés par le serveur : %s",
                          [(a.function.name, a.function.arguments) for a in appels])
@@ -956,18 +973,30 @@ def _historique(messages: list[MessageHistorique]) -> list[dict[str, Any]]:
 
 
 async def repondre(etat: EtatServeur, question: str, historique: list[MessageHistorique],
-                   reflexion: bool | None = None) -> dict[str, Any]:
+                   reflexion: bool | None = None, mois: str | None = None) -> dict[str, Any]:
+    """Répond à une question. Avec `mois` : chatbot du rapport (rapport + outils de sections + Hémicycle).
+    Sans `mois` : outil de rédaction des journalistes (Hémicycle seulement)."""
     debut = time.perf_counter()
     reflexion = etat.parametres.reflexion if reflexion is None else reflexion
+    # Lève NumeroInvalide / RapportIntrouvable (convertis en 400 / 404 par la route /chat).
+    rapport = OutilsRapport(mois) if mois else None
     if MOTIF_AIDE.match(question):
         return {
             "reponse": MESSAGE_AIDE, "sources": [], "outils_utilises": [], "credits": 0, "avertissements": [],
+            "actions": [],
             "meta": {"modele": etat.llm.modele, "duree_s": 0.0, "appels_llm": 0, "garde_fou": "aide"},
         }
 
     aujourd_hui = datetime.now(FUSEAU).date()
     compteur = etat.hemicycle.nouveau_compteur()
     systeme = prompt_systeme(aujourd_hui, compteur.max_appels)
+    outils_rapport = rapport.outils_openai() if rapport else []
+    schemas_rapport = {
+        d["function"]["name"]: set(d["function"].get("parameters", {}).get("properties", {}))
+        for d in outils_rapport
+    }
+    if rapport:
+        systeme += prompt_lecteur(rapport)
     messages: list[dict[str, Any]] = [
         {"role": "system", "content": systeme}, *_historique(historique), {"role": "user", "content": question},
     ]
@@ -985,6 +1014,12 @@ async def repondre(etat: EtatServeur, question: str, historique: list[MessageHis
     async def executer_lot(appels: list[Any], etape: int) -> None:
         """Exécute des appels d'outils et ajoute les messages `role: tool` à la conversation."""
         for tool_call in appels:
+            if rapport and rapport.gere(tool_call.function.name):
+                # Outils du rapport : locaux, gratuits, ils produisent des `actions` pour la page.
+                message_tool, _ = rapport.executer(tool_call)
+                messages.append(message_tool)
+                outils_utilises.append({**rapport.appels[-1], "lance_par": "modele", "etape": etape})
+                continue
             resultat, depuis_cache = await executer_appel(etat, tool_call, compteur)
             resultats.append(resultat)
             messages.append(resultat.message_openai())
@@ -1004,7 +1039,8 @@ async def repondre(etat: EtatServeur, question: str, historique: list[MessageHis
     for tour in range(compteur.max_appels + 2):
         avec_outils = not compteur.limite_atteinte
         reflexion_tour = reflexion or (tour == 0 and avec_outils and etat.parametres.reflexion_premier_tour)
-        reponse = await _appeler_llm(etat, messages, etat.outils if avec_outils else None, reflexion_tour)
+        reponse = await _appeler_llm(etat, messages, (etat.outils + outils_rapport) if avec_outils else None,
+                                     reflexion_tour, schemas_rapport)
         appels_en_texte += getattr(reponse, "appels_en_texte", 0)
         etapes_llm.append({
             "etape": tour + 1,
@@ -1018,7 +1054,8 @@ async def repondre(etat: EtatServeur, question: str, historique: list[MessageHis
             tokens["entree"] += getattr(reponse.usage, "prompt_tokens", 0) or 0
             tokens["sortie"] += getattr(reponse.usage, "completion_tokens", 0) or 0
         taille_reflexion += len(reponse.reflexion or "")
-        if not reponse.appels_outils and not resultats and avec_outils and not recherche_auto:
+        if (not reponse.appels_outils and not resultats and not (rapport and rapport.appels)
+                and avec_outils and not recherche_auto):
             # Le modèle a répondu sans chercher : sa réponse ne peut pas venir d'Hémicycle.
             # Le serveur lance lui-même la recherche avec les mots-clés de la question,
             # puis redonne la main au modèle avec les résultats.
@@ -1048,8 +1085,10 @@ async def repondre(etat: EtatServeur, question: str, historique: list[MessageHis
     avertissements: list[str] = []
     garde_fou = None
 
-    # Garde-fou : aucune source Hémicycle → aucun contenu factuel du modèle.
-    if not consultees:
+    sources_rapport = rapport.sources() if rapport else []
+
+    # Garde-fou : aucune source (ni Hémicycle, ni section du rapport) → aucun contenu factuel du modèle.
+    if not consultees and not sources_rapport:
         garde_fou = "aucune_source"
         if texte and texte != MESSAGE_INTROUVABLE:
             journal.info("Réponse du modèle écartée (aucune source) : %d caractères.", len(texte))
@@ -1064,11 +1103,13 @@ async def repondre(etat: EtatServeur, question: str, historique: list[MessageHis
         if not texte or sortie_de_moderation(texte):
             texte = "Le modèle n'a pas rédigé de réponse exploitable. Réessayez ou reformulez la question."
             garde_fou = "reponse_vide"
-        sources = choisir_sources(consultees, texte)
-        # Contexte autorisé : la question, les dates du jour et les résultats d'outils (pas le prompt et ses exemples).
+        sources = sources_rapport + (choisir_sources(consultees, texte) if consultees else [])
+        # Contexte autorisé : la question, les dates du jour, les résultats d'outils et le rapport
+        # (pas le prompt et ses exemples).
         lundi, dimanche = semaine_en_cours(aujourd_hui)
         dates = " ".join(f"{_date_fr(jour)} {jour.isoformat()}" for jour in (aujourd_hui, lundi, dimanche))
-        corpus = "\n".join([dates, question, *(resultat.contenu for resultat in resultats)])
+        texte_rapport = rapport.rapport.texte_brut() if rapport else ""
+        corpus = "\n".join([dates, question, texte_rapport, *(resultat.contenu for resultat in resultats)])
         non_retrouves = elements_non_retrouves(texte, corpus)
         if non_retrouves:
             avertissements.append(
@@ -1099,7 +1140,11 @@ async def repondre(etat: EtatServeur, question: str, historique: list[MessageHis
         "outils_utilises": outils_utilises,
         "credits": credits,
         "avertissements": avertissements,
+        # Actions pour la page du rapport (ex. surligner une section) : voir docs/ARCHITECTURE.md.
+        "actions": rapport.actions if rapport else [],
         "meta": {
+            "mode": "lecteur" if rapport else "redaction",
+            "mois": mois,
             "modele": etat.llm.modele,
             "reflexion": reflexion,
             "reflexion_premier_tour": etat.parametres.reflexion_premier_tour,
@@ -1132,7 +1177,9 @@ class RequeteChat(BaseModel):
     model_config = ConfigDict(extra="ignore")
     question: str = Field(min_length=1, max_length=1000)
     historique: list[MessageHistorique] = Field(default_factory=list, max_length=20)
-    mois: str | None = None  # prévu par le contrat de docs/ARCHITECTURE.md ; inutilisé ici
+    # Numéro du rapport (AAAA-MM ou « demo ») : active le chatbot du rapport (mode lecteur).
+    # Absent : outil de rédaction des journalistes.
+    mois: str | None = None
     # Option de test : forcer la réflexion de Qwen 3 pour cette question (défaut : CHATBOT_REFLEXION).
     reflexion: bool | None = None
 
@@ -1176,6 +1223,7 @@ async def cycle_de_vie(app: FastAPI):
 
 
 app = FastAPI(title="Outil de rédaction Hémicycle", lifespan=cycle_de_vie, docs_url=None, redoc_url=None)
+app.include_router(routeur_rapport)  # GET /api/rapport/{mois}, GET /api/rapports
 
 
 @app.get("/", include_in_schema=False)
@@ -1206,7 +1254,11 @@ async def lire_etat(request: Request) -> dict[str, Any]:
 async def chat(requete: RequeteChat, request: Request) -> JSONResponse:
     etat: EtatServeur = request.app.state.etat
     try:
-        corps = await repondre(etat, requete.question.strip(), requete.historique, requete.reflexion)
+        corps = await repondre(etat, requete.question.strip(), requete.historique, requete.reflexion, requete.mois)
+    except NumeroInvalide as erreur:
+        raise HTTPException(400, str(erreur))
+    except RapportIntrouvable as erreur:
+        raise HTTPException(404, str(erreur))
     except ConcurrenceDepassee:
         raise HTTPException(503, "Le modèle est saturé (Featherless, HTTP 429). Réessayez dans une minute.")
     except (openai.AuthenticationError, openai.PermissionDeniedError) as erreur:

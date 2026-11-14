@@ -139,3 +139,12 @@ Serveur [`chatbot/serveur.py`](chatbot/serveur.py) et page [`frontend/outil-reda
 
 - [ ] Déclenchement automatique du pipeline le 1ᵉʳ du mois (GitHub Actions, clé en *secret* du repo).
 - [ ] Requêtes sur l'ensemble des mois (DuckDB) pour les comparaisons dans le temps.
+
+## 8. Chatbot du rapport (mode lecteur)
+
+- [x] Outils `lister_sections_rapport` et `surligner_section` (`chatbot/outils_rapport.py`, 22 tests unitaires).
+- [x] Intégrés dans `serveur.py` : une requête `/chat` avec `mois` active le mode lecteur (rapport dans le prompt, outils du rapport + Hémicycle, champ `actions`). Vérifié en réel sur `demo` (question dans le rapport → surlignage, 0 crédit ; question hors rapport → outils Hémicycle, aucun surlignage).
+- [x] Réflexion activée au 1er tour (`CHATBOT_REFLEXION_PREMIER_TOUR`) : sans elle, le modèle n'appelait jamais `surligner_section`.
+- [ ] Front : implémenter les `actions` sur la page du rapport (défilement + mise en évidence), selon `docs/ARCHITECTURE.md`.
+- [ ] Mesurer la taille du rapport réel dans le prompt (le numéro de démo est court) et le coût en latence.
+- [ ] Vérifier que les réponses hors rapport précisent bien « non vérifié par la rédaction ».
