@@ -18,6 +18,7 @@ puis ouvrir http://127.0.0.1:8000/ (port : CHATBOT_PORT).
 
 Points d'accès :
 - ``GET /`` : la page de l'outil (frontend/outil-redaction/index.html) ;
+- ``GET /site/`` : le site du rapport (dossier frontend/, fichiers statiques) ;
 - ``POST /chat`` : ``{"question", "historique"}`` → ``{"reponse", "sources", "outils_utilises", "credits", …}`` ;
 - ``POST /chat/flux`` : même corps, réponse NDJSON : les étapes au fil de l'eau, puis la réponse de ``/chat`` ;
 - ``GET /etat`` : modèle, outils exposés, crédits consommés depuis le démarrage, solde Hémicycle ;
@@ -54,6 +55,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from featherless_client import (
@@ -1648,6 +1650,8 @@ app = FastAPI(title="Outil de rédaction Hémicycle", lifespan=cycle_de_vie, doc
 app.include_router(routeur_rapport)  # GET /api/rapport/{mois}, GET /api/rapports
 # CORS ouvert à toutes les origines (démo) : le site peut être servi ailleurs que par ce serveur.
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+# Le site du rapport (frontend/) servi tel quel sous /site/ : même origine que /chat, URL relatives possibles.
+app.mount("/site", StaticFiles(directory=RACINE / "frontend", html=True, check_dir=False), name="site")
 
 
 @app.get("/", include_in_schema=False)
