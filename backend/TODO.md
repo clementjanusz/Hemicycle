@@ -88,16 +88,15 @@ Contexte : [`backend/README.md`](README.md) · [`docs/ARCHITECTURE.md`](../docs/
 - [ ] Marquer les sources issues du MCP `"verifie_par_la_redaction": false`.
 - [ ] **Clé dédiée au chatbot** (`hmc_live_`) avec un plafond de crédits par jour. Pour l'instant, la même clé est utilisée pour le pipeline et le chatbot.
 
-## 6. Modèle : Arete 27B
+## 6. Modèle : Qwen3-32B
 
-- [x] Disponibilité vérifiée sur Featherless : **`NousResearch/Arete-27B`** (fine-tune de Qwen3.8-27B par Nous Research, 32K de contexte servis, 2 unités de concurrence, *tool calling* indiqué comme supporté).
+- [x] Disponibilité vérifiée sur Featherless : **`Qwen/Qwen3-32B`** (32K de contexte servis, 2 unités de concurrence, FP8, *tool calling* natif documenté par Featherless).
 - [x] `FEATHERLESS_MODEL` mis à jour dans `.env.example`.
-- [ ] **Tester le *tool calling* en conditions réelles** avec les outils MCP. La doc générale de Featherless ne garantit officiellement que Qwen 3 et Kimi-K2 ; Arete est basé sur Qwen 3.x et sa page l'annonce compatible, mais c'est à confirmer.
-- [ ] **Gérer le raisonnement** : un modèle de la famille Qwen 3 peut produire un bloc de réflexion (`<think>…</think>`). Il faut le filtrer avant d'afficher la réponse.
+- [ ] **Premier test de *tool calling*** avec un ou deux outils MCP (ex. `rechercher`, `lire_scrutin`) avant de brancher toute la liste blanche.
+- [ ] **Gérer le raisonnement** : Qwen 3 peut produire un bloc de réflexion (`<think>…</think>`). Soit le filtrer avant d'afficher la réponse, soit le désactiver (à tester : instruction `/no_think` de Qwen 3). Attention, ce bloc consomme aussi du contexte.
 - [ ] **Construire un jeu d'évaluation** d'une vingtaine de questions types (factuelles, comparaisons d'un mois à l'autre, « mon député », hors sujet, questions orientées), avec les réponses attendues.
-  - Pourquoi c'est important : la fiche du modèle annonce un score factuel moyen de 2,98/5 sur l'évaluation de ses auteurs. L'ancrage sur le rapport et le MCP est donc indispensable.
-  - Vérifier aussi la **neutralité politique** : le fine-tune d'Arete porte précisément sur les réponses politiques.
-- [ ] **Prévoir un modèle de repli** (Qwen 3) si le *tool calling* ou la qualité ne suffisent pas.
+  - Vérifier que les réponses s'appuient bien sur le rapport et citent leurs sources.
+  - Vérifier la qualité du français et la **neutralité politique**.
 
 ---
 

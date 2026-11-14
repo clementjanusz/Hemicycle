@@ -105,22 +105,21 @@ Lecteur ── question ──▶ POST /chat
 3. **Pas de source, pas de réponse.** S'il ne trouve rien de solide, il le dit.
 4. **Neutralité.** Il expose des faits et des votes, pas d'opinion politique.
 
-### Modèle : Arete 27B
+### Modèle : Qwen3-32B
 
-Modèle retenu : **[`NousResearch/Arete-27B`](https://featherless.ai/models/NousResearch/Arete-27B)**, un fine-tune de Qwen3.8-27B par Nous Research.
+Modèle retenu : **[`Qwen/Qwen3-32B`](https://featherless.ai/models/Qwen/Qwen3-32B)**. La famille Qwen 3 fait partie des modèles pour lesquels Featherless documente officiellement le *tool calling* natif, et c'est le modèle utilisé dans leur [exemple](https://featherless.ai/docs/tool-calling).
 
 | Caractéristique | Valeur sur Featherless |
 | --- | --- |
 | Contexte servi | **32K tokens** → rapport et résultats d'outils à garder compacts |
 | Concurrence | 2 unités par requête |
-| *Tool calling* | Indiqué comme supporté — à valider en conditions réelles avec le MCP |
-| Licence | Apache 2.0 |
+| *Tool calling* | Supporté nativement (format OpenAI `tools` / `tool_calls`) |
+| Quantification | FP8 |
 
-Points de vigilance (détail dans [`TODO.md`](TODO.md#6-modèle--arete-27b)) :
+Points de vigilance (détail dans [`TODO.md`](TODO.md#6-modèle--qwen3-32b)) :
 
-- filtrer l'éventuel bloc de raisonnement (`<think>…</think>`) avant d'afficher la réponse ;
-- score factuel moyen de 2,98/5 sur l'évaluation de ses auteurs → l'ancrage sur le rapport est indispensable ;
-- prévoir un modèle de repli de la famille Qwen 3 si besoin.
+- Qwen 3 peut produire un bloc de raisonnement (`<think>…</think>`) : le filtrer avant d'afficher la réponse, ou le désactiver ;
+- tester la qualité des réponses en français et la neutralité politique sur un jeu de questions types.
 
 ### Garde-fous
 
