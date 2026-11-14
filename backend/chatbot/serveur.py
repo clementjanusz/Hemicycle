@@ -17,8 +17,9 @@ Lancement (depuis backend/chatbot/) ::
 puis ouvrir http://127.0.0.1:8000/ (port : CHATBOT_PORT).
 
 Points d'accès :
-- ``GET /`` : la page de l'outil (frontend/outil-redaction/index.html) ;
-- ``GET /site/`` : le site du rapport (dossier frontend/, fichiers statiques) ;
+- ``GET /`` : le site du rapport (dossier frontend/, fichiers statiques ; page d'accueil frontend/index.html) ;
+- ``GET /redaction`` : la page de l'outil de rédaction (frontend/outil-redaction/index.html) ;
+- ``GET /site/`` : alias du site du rapport (anciennes URL) ;
 - ``POST /chat`` : ``{"question", "historique"}`` → ``{"reponse", "sources", "outils_utilises", "credits", …}`` ;
 - ``POST /chat/flux`` : même corps, réponse NDJSON : les étapes au fil de l'eau, puis la réponse de ``/chat`` ;
 - ``GET /etat`` : modèle, outils exposés, crédits consommés depuis le démarrage, solde Hémicycle ;
@@ -1653,11 +1654,12 @@ app = FastAPI(title="Outil de rédaction Hémicycle", lifespan=cycle_de_vie, doc
 app.include_router(routeur_rapport)  # GET /api/rapport/{mois}, GET /api/rapports
 # CORS ouvert à toutes les origines (démo) : le site peut être servi ailleurs que par ce serveur.
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-# Le site du rapport (frontend/) servi tel quel sous /site/ : même origine que /chat, URL relatives possibles.
+# Le site du rapport (frontend/) est servi à la racine, monté tout en bas du fichier (après les routes de l'API).
+# /site/ reste un alias pour les anciennes URL (logo de l'outil de rédaction, liens déjà partagés).
 app.mount("/site", StaticFiles(directory=RACINE / "frontend", html=True, check_dir=False), name="site")
 
 
-@app.get("/", include_in_schema=False)
+@app.get("/redaction", include_in_schema=False)
 async def page() -> FileResponse:
     if not FICHIER_PAGE.is_file():
         raise HTTPException(404, f"Page introuvable : {FICHIER_PAGE}")
@@ -1868,6 +1870,11 @@ async def appel_direct(requete: RequeteAppel, request: Request) -> JSONResponse:
         "solde_hemicycle": etat.solde,
         "credits_serveur": etat.credits_serveur,
     })
+
+
+# Le site du rapport à la racine : / → frontend/index.html, /chatbot/chatbot.js, etc.
+# Monté EN DERNIER : un montage sur « / » capte tout ce qui n'a pas été reconnu par les routes déclarées avant lui.
+app.mount("/", StaticFiles(directory=RACINE / "frontend", html=True, check_dir=False), name="accueil")
 
 
 def main() -> None:

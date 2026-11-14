@@ -5,7 +5,7 @@ Brief de passation, à jour au 14/11/2026 (branche `backend`). Le backend est pr
 ## En bref
 
 - **Le site** : `frontend/index.html`, le dossier « Après les flammes » en scrollytelling, écrit par l'équipe front. C'est une page statique, sans widget de chatbot pour l'instant.
-- **Le backend** : un serveur FastAPI, `backend/chatbot/serveur.py`, sur le port 8000. Il expose le chatbot du rapport (`POST /chat` et `POST /chat/flux`) et sert aussi le site sous `/site/`.
+- **Le backend** : un serveur FastAPI, `backend/chatbot/serveur.py`, sur le port 8000. Il expose le chatbot du rapport (`POST /chat` et `POST /chat/flux`) et sert aussi le site à la racine `/` (alias `/site/`).
 - **Ce qui manque** :
   1. Le texte du numéro en Markdown, que le chatbot lit pour répondre.
   2. Un widget de chatbot dans la page.
@@ -29,11 +29,11 @@ Vérifications rapides, toutes gratuites :
 ```bash
 curl -s http://127.0.0.1:8000/etat            # modèle, solde Hémicycle
 curl -s http://127.0.0.1:8000/api/rapports    # numéros disponibles (aujourd'hui : ["demo"])
-open http://127.0.0.1:8000/site/              # le site du rapport, servi par le backend
+open http://127.0.0.1:8000/                   # le site du rapport, servi par le backend (page d'accueil)
 ```
 
 **URL de base côté front :**
-- **Recommandé** : ouvrir le site par `http://127.0.0.1:8000/site/`. La page et l'API ont alors la même origine, et les appels peuvent utiliser des URL relatives (`fetch("/chat/flux", …)`).
+- **Recommandé** : ouvrir le site par `http://127.0.0.1:8000/`. La page et l'API ont alors la même origine, et les appels peuvent utiliser des URL relatives (`fetch("/chat/flux", …)`).
 - **Site servi ailleurs** (autre port, hébergeur statique) : le CORS est ouvert à toutes les origines. Il faut alors une URL absolue, configurable, par exemple `const API = window.CHATBOT_API ?? "http://127.0.0.1:8000";`. À distance, via Tailscale : `http://desktop:8000`.
 
 ## 2. Écrire le numéro en Markdown : `rapports/2026-11/rapport.md`
@@ -143,5 +143,5 @@ Chaque question coûte 0 à 5 crédits Hémicycle (1 crédit = 0,01 €), plus l
 | `POST /chat` | Même corps que `/chat/flux` ; réponse d'un bloc, sans progression. Solution de repli. |
 | `GET /api/rapport/{mois}`, `GET /api/rapports` | Le rapport découpé en sections, et la liste des numéros. |
 | `GET /etat` | Modèle, crédits consommés, solde Hémicycle. |
-| `GET /` | Outil de rédaction des journalistes (veille parlementaire), sans lien avec le site public. |
+| `GET /redaction` | Outil de rédaction des journalistes (veille parlementaire), sans lien avec le site public. |
 | `GET /api/catalogue`, `POST /api/appel` | Endpoints de la veille (outil interne). |

@@ -205,12 +205,12 @@ Petit outil web interne : un journaliste pose une question (« Quoi de neuf à l
 ```bash
 cd backend/chatbot
 uv pip install --python .venv/bin/python -r requirements.txt   # une fois (ajoute fastapi et uvicorn)
-.venv/bin/python serveur.py                                     # puis ouvrir http://127.0.0.1:8000/
+.venv/bin/python serveur.py                                     # puis ouvrir http://127.0.0.1:8000/ (site du rapport) ou http://127.0.0.1:8000/redaction (outil de rédaction)
 # Autre modèle ou réflexion activée, le temps d'un lancement :
 FEATHERLESS_MODEL=Qwen/Qwen3.8-27B .venv/bin/python serveur.py --reflexion
 ```
 
-- **Points d'accès** : `GET /` (la page), `POST /chat` (`{"question", "historique"}` → `{"reponse", "sources", "outils_utilises", "credits", "avertissements", "meta"}`), `POST /chat/flux` (même corps, même réponse finale, avec la progression au fil de l'eau : voir ci-dessous), `GET /etat` (modèle, outils, crédits consommés depuis le démarrage).
+- **Points d'accès** : `GET /` (le site du rapport, dossier `frontend/`), `GET /redaction` (la page de l'outil de rédaction), `POST /chat` (`{"question", "historique"}` → `{"reponse", "sources", "outils_utilises", "credits", "avertissements", "meta"}`), `POST /chat/flux` (même corps, même réponse finale, avec la progression au fil de l'eau : voir ci-dessous), `GET /etat` (modèle, outils, crédits consommés depuis le démarrage).
 - **Hémicycle uniquement** : le prompt interdit les connaissances propres du modèle ; si aucun appel d'outil n'a ramené de source, le serveur remplace la réponse par « Je n'ai pas trouvé cette information dans Hémicycle. » (avec les recherches effectuées). Si le modèle répond sans appeler d'outil, il est relancé une fois. Les dates et nombres de la réponse absents des résultats d'outils sont signalés (« À vérifier »). Toutes les sources portent `"verifie_par_la_redaction": false`.
 - **L'actualité** : deux outils locaux, `derniers_scrutins` (jeu `scrutins`, 17ᵉ législature, du plus récent au plus ancien, filtres date / mots-clés / solennels) et `agenda_seances` (jeu `reunions`, ordre du jour des séances de la semaine). Ils appellent `interroger` **côté serveur**, sur ces deux jeux seulement (jamais Orcet) ; `interroger` n'est jamais exposé au modèle. Outils MCP exposés en plus : `rechercher`, `lire_texte`, `lire_scrutin`, `positions_groupes`, `resultat_scrutin`, `lire_amendement`.
 - **Coût mesuré (14/11/2026, `Qwen/Qwen3.8-27B`)** : 0 à 4 crédits Hémicycle par question (0 à 0,04 €), 2 à 4 requêtes Featherless, 9 à 32 s. Résultats d'outils en cache 10 minutes (même outil, mêmes arguments → 0 crédit).
