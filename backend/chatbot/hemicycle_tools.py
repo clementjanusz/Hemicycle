@@ -459,7 +459,83 @@ def compacter_resultat_scrutin(donnees: Any) -> Any:
     return compact
 
 
-COMPACTEURS = {"resultat_scrutin": compacter_resultat_scrutin}
+# Types d'organes de l'open data de l'Assemblée (champ `nature` des mandats de `lire_acteur`).
+# Libellés vérifiés le 14/11/2026 sur le jeu `organes` d'Hémicycle (colonne code_type) pour les
+# codes observés ; un code absent de la table est laissé tel quel.
+TYPES_ORGANES: dict[str, str] = {
+    "ASSEMBLEE": "mandat de député",
+    "GP": "groupe politique",
+    "COMPER": "commission permanente",
+    "CNPE": "commission d'enquête",
+    "CNPS": "commission spéciale",
+    "MISINFO": "mission d'information",
+    "GE": "groupe d'études",
+    "GA": "groupe d'amitié",
+    "ORGEXTPARL": "organisme extraparlementaire",
+    "PARPOL": "parti politique",
+    "MINISTERE": "ministère",
+}
+# Mandats nombreux et peu informatifs : comptés, sauf fonction particulière (président…).
+TYPES_COMPTES = {"GA": "groupes_amitie_en_cours", "GE": "groupes_etudes_en_cours"}
+MAX_MANDATS_TERMINES = 6
+
+
+def compacter_acteur(donnees: Any, aujourd_hui: str | None = None) -> Any:
+    """Fiche `lire_acteur` : identité, mandats en cours, derniers mandats terminés.
+
+    Réponse brute mesurée (PA794838, 14/11/2026) : 5 837 caractères, dont 6 060 pour 50 mandats
+    (les 50 plus récents : le groupe politique et le mandat de député, plus anciens, n'y figuraient
+    pas), aux trois quarts des groupes d'amitié et d'études. Format compact : ≈ 1 000 caractères.
+    Chaque mandat garde l'identifiant de l'organe (PO…) : Hémicycle ne donne pas son nom ici.
+    Si le format change, la réponse est renvoyée telle quelle.
+    """
+    if not isinstance(donnees, dict) or not isinstance(donnees.get("mandats"), list):
+        return donnees
+    mandats = donnees["mandats"]
+    if not all(isinstance(m, dict) and m.get("nature") for m in mandats):
+        return donnees
+    jour = aujourd_hui or time.strftime("%Y-%m-%d")
+
+    def resume(m: dict[str, Any]) -> dict[str, Any]:
+        nature = str(m.get("nature"))
+        sortie = {"type": TYPES_ORGANES.get(nature, nature), "organe": m.get("organe"), "qualite": m.get("qualite"),
+                  "debut": m.get("debut")}
+        if m.get("fin"):
+            sortie["fin"] = m["fin"]
+        # Champs inattendus (circonscription, lieu d'élection…) : gardés tels quels.
+        sortie.update({c: v for c, v in m.items()
+                       if c not in ("organe", "nature", "qualite", "debut", "fin", "legislature") and v not in (None, "")})
+        return sortie
+
+    en_cours, termines = [], []
+    for m in mandats:
+        (en_cours if not m.get("fin") or str(m["fin"]) >= jour else termines).append(m)
+    compact = {cle: valeur for cle, valeur in donnees.items() if cle != "mandats"}
+    comptes: dict[str, set[str]] = {}
+    for m in en_cours:
+        cle = TYPES_COMPTES.get(str(m["nature"]))
+        if cle and str(m.get("qualite") or "").lower() == "membre":
+            comptes.setdefault(cle, set()).add(str(m.get("organe")))
+    compact["mandats_en_cours"] = [
+        resume(m) for m in en_cours
+        if not (m["nature"] in TYPES_COMPTES and str(m.get("qualite") or "").lower() == "membre")
+    ]
+    for cle in TYPES_COMPTES.values():
+        if comptes.get(cle):
+            compact[cle] = len(comptes[cle])
+    compact["mandats_termines_recents"] = [
+        resume(m) for m in termines if m["nature"] not in TYPES_COMPTES
+    ][:MAX_MANDATS_TERMINES]
+    natures = {str(m["nature"]) for m in en_cours}
+    remarques = ["Organes désignés par leur identifiant (PO…) : Hémicycle ne donne pas leur nom dans cette fiche."]
+    if "GP" not in natures:
+        remarques.append(f"Groupe politique absent des {len(mandats)} mandats renvoyés (les plus récents) : "
+                         "le groupe actuel est donné par chercher_depute.")
+    compact["remarque"] = " ".join(remarques)
+    return compact
+
+
+COMPACTEURS = {"resultat_scrutin": compacter_resultat_scrutin, "lire_acteur": compacter_acteur}
 
 
 # --------------------------------------------------------------------------
@@ -485,6 +561,8 @@ class ResultatOutil:
     solde_restant: int | None = None  # lu dans _meta.credits_remaining
     duree_s: float = 0.0
     texte_brut: str = field(default="", repr=False)  # réponse complète, pour le débogage
+    # Appel réellement envoyé au MCP : {"outil", "arguments"} (pour l'afficher au journaliste).
+    requete_hemicycle: dict[str, Any] | None = None
 
     def message_openai(self) -> dict[str, Any]:
         """Message `role: tool` à ajouter à la conversation envoyée au modèle."""
@@ -858,6 +936,7 @@ class OutilsHemicycle:
 
         # 5. Bilan.
         resultat.tool_call_id = tool_call_id
+        resultat.requete_hemicycle = {"outil": nom, "arguments": dict(arguments)}
         resultat.arguments = dict(arguments)
         resultat.duree_s = round(time.monotonic() - debut, 2)
         resultat.contenu = self._masquer(resultat.contenu)

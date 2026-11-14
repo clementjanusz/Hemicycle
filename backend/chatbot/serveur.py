@@ -19,7 +19,13 @@ puis ouvrir http://127.0.0.1:8000/ (port : CHATBOT_PORT).
 Points d'accès :
 - ``GET /`` : la page de l'outil (frontend/outil-redaction/index.html) ;
 - ``POST /chat`` : ``{"question", "historique"}`` → ``{"reponse", "sources", "outils_utilises", "credits", …}`` ;
-- ``GET /etat`` : modèle, outils exposés, crédits consommés depuis le démarrage.
+- ``POST /chat/flux`` : même corps, réponse NDJSON : les étapes au fil de l'eau, puis la réponse de ``/chat`` ;
+- ``GET /etat`` : modèle, outils exposés, crédits consommés depuis le démarrage, solde Hémicycle ;
+- ``GET /api/catalogue`` : les endpoints de la veille (catégories, coût, paramètres, requête REST équivalente) ;
+- ``POST /api/appel`` : ``{"outil", "arguments"}`` → appel direct d'un endpoint, sans le modèle.
+
+Le journaliste choisit, question par question, les endpoints que le modèle peut appeler
+(champ ``outils`` de ``POST /chat``) ; le catalogue est défini dans ``veille.py``.
 
 Les clés ne sont jamais affichées ni journalisées.
 """
@@ -33,6 +39,8 @@ import logging
 import os
 import re
 import time
+import traceback
+from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
@@ -44,7 +52,8 @@ from zoneinfo import ZoneInfo
 import openai
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from featherless_client import (
@@ -55,7 +64,28 @@ from featherless_client import (
 )
 from outils_rapport import NumeroInvalide, OutilsRapport, RapportIntrouvable
 from routes_rapport import routeur as routeur_rapport
+from veille import (
+    CATEGORIES,
+    ENDPOINTS,
+    NON_PROPOSES,
+    PAR_NOM,
+    PRESELECTIONS,
+    SELECTION_DEFAUT,
+    SPECS_JEUX,
+    ErreurArgumentsVeille,
+    appel_interroger,
+    attribuer_lignes,
+    compacter_jeu,
+    definition as definition_endpoint,
+    nom_de_famille,
+    nomme_le_depute,
+    remplacer_jours,
+    requete_rest,
+    source_depute,
+    url_scrutin,
+)
 from hemicycle_tools import (
+    ARGUMENTS_PAR_DEFAUT,
     COUT_INCONNU,
     COUTS_CREDITS,
     CompteurConversation,
@@ -73,42 +103,27 @@ FICHIER_ENV = RACINE / ".env"
 FICHIER_PAGE = RACINE / "frontend" / "outil-redaction" / "index.html"
 FUSEAU = ZoneInfo("Europe/Paris")
 
-# Outils MCP exposés au modèle de l'outil de rédaction (intersection avec la liste blanche
-# du .env). Exclus volontairement : `guide` (inutile ici, définition lourde), `lire_acteur`
-# (exige un identifiant PA… qu'aucun outil exposé ne fournit), `interroger` (jamais exposé
-# tel quel : 132 jeux, dont les prédictions Orcet à 50 crédits pièce).
-OUTILS_MCP_REDACTION: tuple[str, ...] = (
-    "rechercher",
-    "lire_texte",
-    "lire_scrutin",
-    "positions_groupes",
-    "resultat_scrutin",
-    "lire_amendement",
-)
-# Descriptions plus directives que celles du serveur, pour orienter le modèle.
-DESCRIPTIONS_SURCHARGEES = {
-    "rechercher": (
-        "Recherche plein texte dans les textes, dossiers législatifs et amendements de l'Assemblée "
-        "nationale (ni scrutins, ni députés). Pour retrouver un texte par son sujet. 2 crédits."
-    ),
-    "lire_texte": (
-        "Lit un texte (projet ou proposition de loi, rapport) et son dossier législatif, par son "
-        "identifiant (ex. PRJLANR5L17B0123). 1 crédit."
-    ),
-}
+# Les endpoints proposés (outils MCP, outils locaux et jeux de données ciblés), leurs descriptions
+# et la sélection par défaut sont définis dans veille.py. `interroger` n'est jamais exposé tel
+# quel au modèle : 132 jeux, dont les prédictions Orcet à 50 crédits pièce.
 
-# Seuls jeux que les outils locaux peuvent interroger (garde-fou contre Orcet et les jeux dérivés).
-JEUX_AUTORISES = frozenset({"scrutins", "reunions"})
+# Seuls jeux que les outils locaux peuvent interroger (garde-fou contre Orcet et les jeux dérivés) :
+# ceux des endpoints « jeu » de veille.py, variantes comprises (`deputes` pour chercher_depute
+# avec anciens = true).
+JEUX_AUTORISES = frozenset({"scrutins", "reunions", *(jeu for spec in SPECS_JEUX.values() for jeu in spec.jeux)})
 LEGISLATURE = 17
 EDITEUR_AN = "Assemblée nationale"
 LICENCE_AN = "Licence Ouverte (Etalab)"
 URL_OPEN_DATA_AN = "https://data.assemblee-nationale.fr"
 
 MESSAGE_INTROUVABLE = "Je n'ai pas trouvé cette information dans Hémicycle."
+# Chatbot du rapport : question hors sujet ou demande d'opinion (ni recherche automatique, ni garde-fou).
+MESSAGE_HORS_PERIMETRE = "Je ne peux répondre qu'aux questions sur l'activité du Parlement et sur ce rapport."
 MESSAGE_AIDE = (
-    "Posez une question sur l'activité de l'Assemblée nationale : derniers scrutins, ordre du jour "
-    "des séances, état d'un texte, position des groupes sur un vote… Les réponses s'appuient "
-    "uniquement sur les données d'Hémicycle consultées en direct (non vérifiées par la rédaction)."
+    "Posez une question sur l'activité du Parlement : derniers scrutins, ordre du jour des séances, "
+    "état d'un texte, position des groupes sur un vote… Choisissez les endpoints Hémicycle à utiliser "
+    "dans « Endpoints de la veille ». Les réponses s'appuient uniquement sur les données d'Hémicycle "
+    "consultées en direct."
 )
 # Salutations et questions sur l'outil : réponse fixe, sans appel au modèle ni à Hémicycle.
 MOTIF_AIDE = re.compile(
@@ -132,7 +147,7 @@ comment pourquoi quand combien est-ce y-a-t-il a-t-il
 actualité actualités actu info infos information informations nouvelle nouvelles nouveau neuf
 récent récente récents récentes récemment dernier dernière derniers dernières semaine mois jour
 aujourd hui hier ce-mois-ci cette-semaine sujet concernant propos point où-en état passé passe
-assemblée nationale parlement parlementaire parlementaires député députés hémicycle
+assemblée nationale parlement parlementaire parlementaires député députés députée députées hémicycle
 texte textes loi lois projet proposition données donnée beaucoup plein eu avoir y-a
 vote votes voté votée votés voter
 """.split())
@@ -145,13 +160,79 @@ def mots_cles(question: str) -> str:
     return " ".join(dict.fromkeys(utiles))[:120] if utiles else ""
 
 
-def appels_recherche_automatique(question: str) -> list[Any]:
-    """Appels d'outils lancés par le serveur quand le modèle n'en a appelé aucun."""
+# « Prénom Nom » dans une question (« Didier Lemaire », « Marine Le Pen », « Charles de Courson »).
+MAJ, MIN = "A-ZÀ-ÖØ-Þ", "a-zß-öø-ÿ"
+MOTIF_PERSONNE = re.compile(
+    rf"(?<![\w-])([{MAJ}][{MIN}]+(?:-[{MAJ}][{MIN}]+)?)\s+"  # prénom, éventuellement composé
+    rf"((?:(?:de|du|des|d'|d’|van|von|di|da)\s*)?[{MAJ}][{MIN}'’]*[{MIN}](?:[\s-][{MAJ}][{MIN}'’]*[{MIN}])?)"  # nom
+)
+# Premiers mots à ignorer : début de phrase, institutions, groupes, lieux.
+PAS_UN_PRENOM = frozenset("""
+quel quelle quels quelles que qui quoi comment combien pourquoi quand où est le la les un une des du de et ou
+mais donc sur dans pour par avec sans selon depuis entre vers chez monsieur madame m mme assemblée sénat
+parlement gouvernement république rassemblement national nationale ensemble france union droite gauche
+démocrate démocrates socialistes écologiste écologistes horizons libertés indépendants outre mer territoires
+nouveau nouvelle front populaire insoumise conseil constitutionnel cour premier première ministre président
+présidente commission groupe hémicycle europe européen européenne paris loi lois texte projet proposition
+réforme amendement rapport mission plan budget scrutin vote
+""".split())
+MOTIF_NUMERO_SCRUTIN = re.compile(r"scrutin(?:\s+public)?(?:\s+solennel)?\s*(?:n\s*[°o]\.?\s*)?(\d{1,5})\b", re.IGNORECASE)
+MOTIF_MAJUSCULE = re.compile(rf"(?<![\w-])[{MAJ}]")
+
+
+def personne_citee(question: str) -> str | None:
+    """Nom de famille d'une personne nommée « Prénom Nom » dans la question (None sinon)."""
+    # Chaque mot à majuscule est essayé comme prénom (« Selon Didier Lemaire » : « Selon » puis « Didier »).
+    for debut in (m.start() for m in MOTIF_MAJUSCULE.finditer(question)):
+        correspondance = MOTIF_PERSONNE.match(question, debut)
+        if correspondance is None:
+            continue
+        prenom, nom = correspondance.groups()
+        if prenom.lower() in PAS_UN_PRENOM or nom.split()[0].lower() in PAS_UN_PRENOM - {"de", "du", "des", "le", "la"}:
+            continue
+        famille = nom_de_famille(nom)
+        if len(famille) >= 3:
+            return famille
+    return None
+
+
+def appels_recherche_automatique(question: str, selection: tuple[str, ...] | list[str] = SELECTION_DEFAUT) -> list[Any]:
+    """Appels d'outils lancés par le serveur quand le modèle n'en a appelé aucun : les deux premiers
+    endpoints de recherche choisis par le journaliste (liste vide si aucun ne convient).
+
+    Question sur une personne nommée (« Comment a voté Didier Lemaire sur le scrutin n° 1234 ? ») :
+    chercher_depute, et resultat_scrutin si un numéro de scrutin est donné ; pas de recherche plein texte.
+    Question sur un scrutin numéroté : resultat_scrutin (question de vote) ou lire_scrutin, seul."""
+    personne = personne_citee(question)
+    numero = MOTIF_NUMERO_SCRUTIN.search(question)
+    if personne and "chercher_depute" in selection:
+        candidats = [("chercher_depute", {"nom": personne})]
+        if numero:
+            candidats.append(("resultat_scrutin", {"id": f"VTANR5L{LEGISLATURE}V{int(numero.group(1))}"}))
+        return _appels_serveur(candidats, selection)
     cles = mots_cles(question)
+    if numero:  # « Que dit le scrutin n° 1234 ? », « Comment a voté le groupe X sur le scrutin n° 1234 ? »
+        prefere = "resultat_scrutin" if re.search(r"\bvot", question, re.IGNORECASE) else "lire_scrutin"
+        for nom in dict.fromkeys((prefere, "lire_scrutin", "resultat_scrutin")):
+            if nom in selection:  # un seul appel, sur le scrutin désigné
+                return _appels_serveur([(nom, {"id": f"VTANR5L{LEGISLATURE}V{int(numero.group(1))}"})], selection)
     if cles:
-        specs = [("rechercher", {"q": cles, "limit": 5}), ("derniers_scrutins", {"recherche": cles, "limite": 5})]
+        candidats = [
+            ("rechercher", {"q": cles, "limit": 5}), ("derniers_scrutins", {"recherche": cles, "limite": 5}),
+            ("senat_dossiers", {"recherche": cles}), ("amendements_deposes", {"recherche": cles, "limite": 5}),
+            ("textes_deposes", {"recherche": cles, "limite": 5}), ("senat_amendements", {"recherche": cles, "limite": 5}),
+        ]
     else:  # question générale d'actualité (« quoi de neuf ? »)
-        specs = [("derniers_scrutins", {"limite": 8}), ("agenda_seances", {})]
+        candidats = [
+            ("derniers_scrutins", {"limite": 8}), ("agenda_seances", {}), ("fil_evenements", {}),
+            ("senat_derniers_scrutins", {"limite": 8}), ("senat_agenda", {}),
+        ]
+    return _appels_serveur(candidats, selection)
+
+
+def _appels_serveur(candidats: list[tuple[str, dict[str, Any]]], selection: tuple[str, ...] | list[str]) -> list[Any]:
+    """Les deux premiers candidats choisis par le journaliste, au format des `tool_calls` du SDK."""
+    specs = [(nom, arguments) for nom, arguments in candidats if nom in selection][:2]
     return [
         SimpleNamespace(
             id=f"recherche_auto_{indice}",
@@ -201,7 +282,9 @@ class Parametres:
     reflexion_premier_tour: bool
     max_tokens: int  # sans réflexion (CHATBOT_MAX_TOKENS)
     temperature: float
-    max_credits_question: int
+    max_credits_question: int  # budget par défaut d'une question
+    max_credits_plafond: int  # budget maximal qu'un journaliste peut choisir pour une question
+    max_appels_plafond: int  # nombre maximal d'appels d'outils qu'un journaliste peut choisir
     max_credits_serveur: int  # plafond depuis le démarrage du serveur (compteur en mémoire)
     cache_s: int  # durée de vie du cache des résultats d'outils
     concurrence_llm: int
@@ -216,9 +299,11 @@ def charger_parametres() -> Parametres:
         reflexion=reflexion,
         reflexion_premier_tour=_booleen_env("CHATBOT_REFLEXION_PREMIER_TOUR", True),
         # La réflexion compte dans les tokens de sortie : prévoir large quand elle est active.
-        max_tokens=_entier_env("CHATBOT_MAX_TOKENS", 900, 100),
+        max_tokens=_entier_env("CHATBOT_MAX_TOKENS", 1800, 100),
         temperature=0.3,
         max_credits_question=_entier_env("CHATBOT_MAX_CREDITS_QUESTION", 10, 1),
+        max_credits_plafond=_entier_env("CHATBOT_MAX_CREDITS_QUESTION_PLAFOND", 30, 1),
+        max_appels_plafond=_entier_env("CHATBOT_MAX_TOOL_CALLS_PLAFOND", 8, 1),
         max_credits_serveur=_entier_env("CHATBOT_MAX_CREDITS_SERVEUR", 300, 0),
         cache_s=_entier_env("CHATBOT_CACHE_S", 600, 0),
         concurrence_llm=_entier_env("CHATBOT_CONCURRENCE_LLM", 1, 1),
@@ -244,42 +329,101 @@ def semaine_en_cours(aujourd_hui: date) -> tuple[date, date]:
     return lundi, lundi + timedelta(days=6)
 
 
-def prompt_systeme(aujourd_hui: date, max_appels: int) -> str:
+def consignes_outils(selection: list[str] | tuple[str, ...], aujourd_hui: date) -> str:
+    """Une ligne de méthode par endpoint choisi par le journaliste (dans l'ordre du catalogue)."""
+    lignes = [f"   - {remplacer_jours(e.consigne, aujourd_hui)}" for e in ENDPOINTS if e.nom in selection]
+    if not any(PAR_NOM[nom].categorie == "senat" for nom in selection if nom in PAR_NOM):
+        lignes.append("   - Les outils disponibles couvrent l'Assemblée nationale, pas le Sénat.")
+    return "\n".join(lignes)
+
+
+def prompt_systeme(aujourd_hui: date, max_appels: int, selection: list[str] | tuple[str, ...] = SELECTION_DEFAUT) -> str:
     lundi, dimanche = semaine_en_cours(aujourd_hui)
-    return f"""Tu es l'assistant de veille parlementaire d'une rédaction. Des journalistes t'interrogent sur l'actualité de l'Assemblée nationale pour préparer un rapport mensuel.
+    return f"""Tu es l'assistant de veille parlementaire d'une rédaction. Des journalistes t'interrogent sur l'actualité du Parlement pour préparer un rapport mensuel.
 
 Aujourd'hui : {_date_longue(aujourd_hui)}. Semaine en cours : du lundi {_date_fr(lundi)} au dimanche {_date_fr(dimanche)}.
 
 Méthode, pour CHAQUE question :
-1. Ta première action est TOUJOURS d'appeler un ou deux outils ({max_appels} appels au plus). Ne réponds jamais avant d'avoir appelé un outil.
-   - Actualité, « cette semaine », derniers votes : derniers_scrutins (depuis = {lundi.isoformat()}) ; ordre du jour et textes en discussion : agenda_seances.
-   - « Où en est le texte sur X ? » : derniers_scrutins avec recherche = mots-clés de X, SANS « depuis », et rechercher avec q = mots-clés de X (types "dossier,texte"). Donne d'abord l'étape la plus récente (date la plus proche d'aujourd'hui). lire_texte n'accepte qu'un identifiant de texte (PRJL…, PION…), jamais un dossier DLR….
-   - Position des groupes sur des scrutins : positions_groupes (10 scrutins au plus par appel).
-   - Les outils couvrent l'Assemblée nationale, pas le Sénat.
-2. Puis réponds UNIQUEMENT avec ce que contiennent les résultats des outils. Tu ne sais rien du Parlement par toi-même : chaque fait (date, nom, chiffre, résultat, intitulé, étape) doit figurer dans un résultat d'outil de cette conversation. N'utilise jamais tes connaissances propres, même pour compléter, contextualiser ou corriger.
-3. Si, après les appels d'outils, les résultats ne contiennent pas l'information demandée, réponds seulement : « {MESSAGE_INTROUVABLE} »
+1. Ta première action est TOUJOURS d'appeler des outils ({max_appels} appels au plus ; tu peux en appeler plusieurs à la fois). Ne réponds jamais avant d'avoir appelé un outil. Outils choisis par le journaliste pour cette question :
+{consignes_outils(selection, aujourd_hui)}
+2. Approfondis avant de répondre : une liste ou une recherche ne suffit pas. Pour les deux ou trois faits les plus importants trouvés, appelle les outils de détail disponibles parmi ceux ci-dessus (contenu et étapes du texte ou du dossier, décompte et positions des groupes d'un scrutin, suite au Sénat, ordre du jour à venir), tant qu'il te reste des appels.
+3. Puis réponds UNIQUEMENT avec ce que contiennent les résultats des outils. Tu ne sais rien du Parlement par toi-même : chaque fait (date, nom, chiffre, résultat, intitulé, étape) doit figurer dans un résultat d'outil de cette conversation. N'utilise jamais tes connaissances propres, même pour compléter, contextualiser ou corriger.
+4. Si, après les appels d'outils, les résultats ne contiennent pas l'information demandée, réponds seulement : « {MESSAGE_INTROUVABLE} »
 
 Identifiants : scrutin VTANR5L17V<numéro> (VTANR5L17V1234 = scrutin n° 1234) ; député PA<chiffres> ; texte PRJLANR5L17B<numéro> (projet de loi) ou PIONANR5L17B<numéro> (proposition de loi) ; dossier DLR5L17N<chiffres> ; amendement AMANR5L17….
 
-Forme de la réponse :
-- En français, très brève : 80 mots au total au maximum, en 5 puces au plus, sans titre, introduction ni conclusion. Ne garde que les faits les plus importants (votes sur l'ensemble d'un texte, textes inscrits en séance).
-- Chaque puce tient en une ligne (20 mots au plus) : la date (JJ/MM/AAAA), le fait, puis sa source entre parenthèses, par exemple « (scrutin n° 1234) », « (texte n° 567) » ou « (ordre du jour du JJ/MM/AAAA) ».
-- Chiffres et intitulés repris exactement des résultats d'outils. Ton neutre : ni opinion, ni qualificatif, ni pronostic.
+Forme de la réponse (pour un journaliste qui prépare un article : complète et précise) :
+- En français. Commence par une phrase de synthèse, sans puce, qui répond directement à la question (35 mots au plus).
+- Puis de 4 à {MAX_PUCES} puces, les faits les plus importants d'abord (votes sur l'ensemble d'un texte, adoptions et rejets, textes inscrits en séance, étapes de la navette). Une puce par fait, en une ou deux phrases (45 mots au plus) : la date (JJ/MM/AAAA), le fait, puis tous les détails utiles présents dans les résultats — intitulé exact, auteur ou rapporteur et son groupe, décompte (pour, contre, abstentions, votants) et sort du vote, positions des groupes, étape de la procédure, commission saisie, nombre d'amendements, suite prévue au Sénat ou en séance.
+- Termine chaque puce par sa source entre parenthèses, par exemple « (scrutin n° 1234) », « (texte n° 567) », « (amendement n° 89) », « (scrutin du Sénat n° 99) », « (fiche du député) » ou « (ordre du jour du JJ/MM/AAAA) ».
+- Si les résultats annoncent une suite (séance prévue, examen au Sénat, commission mixte paritaire), ajoute une dernière puce « À suivre : … » avec sa date et sa source. N'invente jamais de suite.
+- N'écris qu'un fait est absent (« aucun scrutin… ») que si un outil l'a vérifié, et cite cet outil.
+- 350 mots au plus au total, sans titre ni conclusion. Chiffres et intitulés repris exactement des résultats d'outils. Ton neutre : ni opinion, ni qualificatif, ni pronostic.
 - Pas de liens : les sources sont affichées à part."""
 
 
-def prompt_lecteur(rapport: OutilsRapport) -> str:
-    """Complément du prompt pour le chatbot du rapport (requête avec un `mois`)."""
-    return (
-        "\n\nMODE LECTEUR DU RAPPORT — ces règles complètent et remplacent les précédentes quand elles diffèrent.\n"
-        "Tu réponds à un lecteur du rapport mensuel ci-dessous, publié par la rédaction à partir des données "
-        "d'Hémicycle. Un fait peut venir du texte du rapport ci-dessous OU d'un résultat d'outil Hémicycle de "
-        "cette conversation ; jamais de tes connaissances propres. Si la question porte sur un sujet traité dans "
-        "le rapport, réponds d'abord avec le rapport, sans appeler les outils Hémicycle. Sinon, utilise les outils "
-        "Hémicycle et précise que l'information vient d'Hémicycle et n'a pas été vérifiée par la rédaction.\n\n"
-        "Rapport du mois (chaque section est précédée de son identifiant entre crochets) :\n\n"
-        + rapport.rapport.texte_pour_prompt() + "\n\n" + rapport.consigne_prompt()
+def mois_long(mois: str) -> str:
+    """« 2026-10 » → « octobre 2026 » ; « demo » → « un mois fictif »."""
+    if not re.fullmatch(r"\d{4}-\d{2}", mois):
+        return "un mois fictif"
+    annee, numero = mois.split("-")
+    return f"{MOIS[int(numero) - 1]} {annee}"
+
+
+def prompt_lecteur(rapport: OutilsRapport, aujourd_hui: date, max_appels: int) -> str:
+    """Prompt système complet du chatbot du rapport (requête avec un `mois`).
+
+    Remplace `prompt_systeme` (outil de rédaction) au lieu de s'y ajouter : les deux se contredisaient
+    (outil Hémicycle toujours en premier, réponse en puces, public de journalistes)."""
+    numero = rapport.rapport
+    periode = mois_long(numero.mois)
+    publie = f", publié le {numero.meta['publie_le']}" if numero.meta.get("publie_le") else ""
+    fictif = (
+        "\nCe numéro est un exemple fictif : si le lecteur demande des chiffres réels, rappelle-le.\n"
+        if numero.fictif else ""
     )
+    return f"""Tu es l'assistant du rapport mensuel « {numero.titre} », qui couvre {periode} à l'Assemblée nationale. Un lecteur t'interroge depuis la page où il lit ce numéro{publie}, rédigé par la rédaction à partir des données d'Hémicycle. Vouvoie-le.
+Aujourd'hui : {_date_longue(aujourd_hui)}.
+{fictif}
+TES SOURCES, par ordre de priorité
+1. Le rapport ci-dessous : vérifié par la rédaction, il fait foi.
+2. Les outils Hémicycle : données publiques consultées en direct, NON vérifiées par la rédaction. Ils complètent le rapport (détail d'un vote, texte non traité, actualité postérieure au numéro).
+Tu ne sais rien du Parlement par toi-même : chaque fait (date, nom, chiffre, résultat, intitulé) doit figurer dans le rapport ou dans un résultat d'outil de cette conversation. N'utilise jamais tes connaissances propres, même pour compléter, contextualiser ou corriger.
+
+RÈGLES ÉDITORIALES
+- Neutralité : des faits et des votes ; ni opinion, ni jugement, ni qualificatif (« historique », « camouflet »…), ni pronostic. Ne prête pas d'intentions aux députés ou aux groupes. Ne donne jamais de consigne de vote.
+- Désigne les groupes et les textes par leur nom exact, tel qu'écrit dans les sources.
+- Si le lecteur demande un avis (« qui a raison ? », « est-ce une bonne loi ? »), donne les faits disponibles sans trancher.
+- « Je ne sais pas » vaut mieux qu'une réponse inventée.
+
+=== RAPPORT DU MOIS (chaque section est précédée de son identifiant entre crochets) ===
+{numero.texte_pour_prompt()}
+
+=== MÉTHODE, pour chaque question ===
+{rapport.consigne_prompt()}
+
+Classe d'abord la question :
+A. Traitée par le rapport → surligner_section, puis réponds avec le texte du rapport, sans outil Hémicycle.
+B. Traitée en partie par le rapport, mais le lecteur veut un détail qu'il ne contient pas (vote d'un groupe sur un scrutin précis, suite d'un texte cité) → surligner_section, puis les outils Hémicycle pour le détail. Sépare clairement ce qui vient du rapport et ce qui vient d'Hémicycle.
+C. Sur le Parlement mais absente du rapport → outils Hémicycle seulement ({max_appels} appels au plus), aucune section surlignée.
+   - Derniers votes : derniers_scrutins. Ordre du jour : agenda_seances. « Où en est le texte sur X ? » : derniers_scrutins (recherche = mots-clés de X, sans « depuis ») et rechercher (q = mots-clés de X). Positions des groupes : positions_groupes (10 scrutins au plus par appel).
+   - Un député précis (« Quel est le groupe de X ? », « Que fait la députée Y ? », « Comment a voté X sur le scrutin n° N ? ») : d'abord chercher_depute (nom = son nom de famille seul ; anciens = true pour un ancien député), qui donne son identifiant PA…, son groupe actuel et sa profession. Puis, selon la question : lire_acteur (identifiant PA…) pour ses mandats et fonctions en cours, ou resultat_scrutin (VTANR5L17V<N>) pour son vote, où il figure par son nom dans le vote de son groupe ; s'il n'y figure pas, dis qu'il ne fait pas partie des votants de ce scrutin. Si plusieurs députés correspondent et que le prénom ne permet pas de choisir, cite-les et demande lequel le lecteur vise.
+   - Les outils couvrent l'Assemblée nationale, pas le Sénat.
+   - Si les résultats ne contiennent pas la réponse, réponds seulement : « {MESSAGE_INTROUVABLE} »
+D. Sans lien avec le Parlement ni avec le rapport, ou simple demande d'opinion ou de pronostic → aucun outil ; réponds seulement : « {MESSAGE_HORS_PERIMETRE} »
+
+Si le rapport et un résultat d'outil divergent sur la même période, donne le chiffre du rapport et signale l'écart sans trancher.
+« Ce mois-ci » désigne le mois couvert par le numéro ({periode}), sauf si le lecteur parle explicitement d'aujourd'hui.
+
+=== FORME DE LA RÉPONSE ===
+- En français, clair pour un lecteur non spécialiste. Commence par la réponse elle-même (le chiffre, le résultat du vote, l'étape du texte).
+- Chiffres et intitulés repris exactement. Si un terme technique est indispensable (scrutin solennel, cohésion), explique-le en quelques mots, avec la définition du rapport s'il en donne une.
+- Source après chaque fait, entre parenthèses : (section « Cohésion des groupes ») ou, pour Hémicycle, (scrutin n° 1234, non vérifié par la rédaction) ou (fiche du député, non vérifiée par la rédaction).
+- Pas de liens : les sources sont affichées à part.
+
+Exemples de forme (contenu fictif, à ne jamais réutiliser) :
+- « Le groupe X a voté comme la majorité de ses membres dans N % des scrutins (section « Cohésion des groupes »). »
+- « Le rapport n'en parle pas. D'après Hémicycle, le texte sur X a été adopté le JJ/MM/AAAA (scrutin n° N, non vérifié par la rédaction). »"""
 
 
 # --------------------------------------------------------------------------
@@ -365,11 +509,6 @@ def _date_argument(valeur: Any, nom: str) -> date | None:
         return date.fromisoformat(str(valeur).strip()[:10])
     except ValueError as erreur:
         raise ErreurArguments(f"« {nom} » doit être une date AAAA-MM-JJ (reçu : {valeur!r}).") from erreur
-
-
-def url_scrutin(numero: Any, legislature: int = LEGISLATURE) -> str:
-    """Page publique d'analyse du scrutin (format vérifié le 14/11/2026)."""
-    return f"https://www.assemblee-nationale.fr/dyn/{legislature}/scrutins/{numero}"
 
 
 def _resultat_scrutin(sort_libelle: str | None) -> str | None:
@@ -542,6 +681,8 @@ def compacter_agenda(donnees: Any, depuis: date, jusqu_a: date) -> tuple[dict[st
 MOTIF_TEXTE = re.compile(r"(PRJL|PION)AN(R5)L(\d+)B(\d+)")
 MOTIF_SCRUTIN = re.compile(r"VTANR5L(\d+)V(\d+)")
 MOTIF_DOCUMENT = re.compile(r"/opendata/([A-Z]{4})(AN|SN)([A-Z0-9]+)\.json")
+MOTIF_FICHE_DEPUTE = re.compile(r"/dyn/deputes/(PA\d+)")
+MOTIF_PAGE_SCRUTIN = re.compile(r"assemblee-nationale\.fr/dyn/(\d+)/scrutins/(\d+)")  # resultat_scrutin, lire_scrutin
 NATURES_DOCUMENT = {"PION": "Proposition de loi", "PRJL": "Projet de loi", "RAPP": "Rapport", "AVIS": "Avis",
                     "RION": "Proposition de résolution"}
 
@@ -556,7 +697,19 @@ def enrichir_source(source: dict[str, Any]) -> dict[str, Any]:
     texte = MOTIF_TEXTE.search(url)
     scrutin = MOTIF_SCRUTIN.search(url)
     document = MOTIF_DOCUMENT.search(url)
-    if texte and texte.group(0) + ".json" in url:
+    fiche = MOTIF_FICHE_DEPUTE.search(url)
+    page_scrutin = MOTIF_PAGE_SCRUTIN.search(url)
+    if fiche:  # lire_acteur : page publique du député (nom ajouté par completer_source_acteur)
+        source["ref"] = fiche.group(1)
+        source["nature"] = "depute"
+        source["libelle"] = f"Fiche du député {fiche.group(1)}"
+    elif page_scrutin:  # déjà la page publique du scrutin : référence et libellé seulement
+        legislature, numero = page_scrutin.groups()
+        source["ref"] = f"VTANR5L{legislature}V{numero}"
+        source["numero"] = int(numero)
+        source["nature"] = "scrutin"
+        source["libelle"] = f"Scrutin n° {int(numero)}"
+    elif texte and texte.group(0) + ".json" in url:
         nature, _, legislature, numero = texte.groups()
         genre = "projet-loi" if nature == "PRJL" else "proposition-loi"
         source["url_donnees"] = url
@@ -594,11 +747,29 @@ def enrichir_source(source: dict[str, Any]) -> dict[str, Any]:
     return source
 
 
+def completer_source_acteur(resultat: ResultatOutil) -> None:
+    """lire_acteur : ajoute civilité, prénom et nom à la source « fiche du député », pour la reconnaître
+    dans la réponse (qui cite le nom du député, rarement son identifiant PA…)."""
+    try:
+        fiche = json.loads(resultat.texte_brut)
+    except ValueError:
+        return
+    if not isinstance(fiche, dict) or not str(fiche.get("id") or "").startswith("PA"):
+        return
+    for indice, source in enumerate(resultat.sources):
+        if source.get("nature") == "depute" and source.get("ref") == fiche["id"]:
+            identite = source_depute(fiche["id"], fiche.get("civilite"), fiche.get("prenom"), fiche.get("nom"))
+            resultat.sources[indice] = {**source, "prenom": identite["prenom"], "nom": identite["nom"],
+                                        "libelle": f"Fiche de {identite['libelle']}"}
+
+
 def est_citee(source: dict[str, Any], reponse: str) -> bool:
     if source.get("nature") == "agenda":
         return "ordre du jour" in reponse.lower()
     ref = source.get("ref")
     if ref and ref in reponse:
+        return True
+    if nomme_le_depute(source, reponse):
         return True
     numero = source.get("numero")
     if numero is None:
@@ -746,7 +917,7 @@ def corriger_noms_parametres(arguments: dict[str, Any], proprietes: set[str]) ->
     return corriges
 
 
-MAX_PUCES = 5
+MAX_PUCES = 12
 MOTIF_PUCE = re.compile(r"^\s*([-*•]|\d+[.)])\s+")
 
 
@@ -772,6 +943,12 @@ def nettoyer_reponse(texte: str) -> str:
     return texte.strip()
 
 
+def hors_perimetre(texte: str | None) -> bool:
+    """Le modèle a répondu par le refus prévu (cas D du prompt lecteur), éventuellement reformulé à la marge."""
+    normalise = (texte or "").replace("’", "'").lower()
+    return "je ne peux répondre qu'aux questions" in normalise
+
+
 def sortie_de_moderation(texte: str) -> bool:
     """Sortie d'un classifieur de modération (anomalie observée avec Qwen3-32B et des `tools`)."""
     return texte.lstrip().startswith("Safety:")
@@ -787,8 +964,11 @@ class EtatServeur:
     parametres: Parametres
     llm: ClientFeatherlessAsync
     hemicycle: OutilsHemicycle
-    outils: list[dict[str, Any]]  # définitions envoyées au modèle
+    outils: list[dict[str, Any]]  # définitions de la sélection par défaut (chatbot du rapport, /chat sans « outils »)
     verrou_llm: asyncio.Semaphore
+    definitions: dict[str, dict[str, Any]] = field(default_factory=dict)  # tous les endpoints disponibles
+    indisponibles: dict[str, str] = field(default_factory=dict)  # endpoint → raison
+    solde: int | None = None  # solde de crédits Hémicycle (dernier connu)
     cache: dict[tuple[str, str], tuple[float, ResultatOutil]] = field(default_factory=dict)
     credits_serveur: int = 0  # crédits Hémicycle consommés depuis le démarrage
     acces_refuse: int | None = None  # 401/402/403 renvoyé par Hémicycle
@@ -842,6 +1022,7 @@ async def _executer_local(etat: EtatServeur, nom: str, arguments: dict[str, Any]
 
     resultat = await etat.hemicycle.appeler("interroger", appel, compteur, tool_call_id=tool_call_id)
     resultat.outil, resultat.arguments = nom, dict(arguments)
+    resultat.requete_hemicycle = {"outil": "interroger", "arguments": appel}
     if resultat.erreur:
         return resultat
     try:
@@ -865,12 +1046,56 @@ async def _executer_local(etat: EtatServeur, nom: str, arguments: dict[str, Any]
     return resultat
 
 
-async def executer_appel(etat: EtatServeur, tool_call: Any, compteur: CompteurConversation) -> tuple[ResultatOutil, bool]:
-    """Exécute un `tool_call` du modèle. Renvoie (résultat, servi depuis le cache ?)."""
+async def _executer_jeu(etat: EtatServeur, nom: str, arguments: dict[str, Any],
+                        compteur: CompteurConversation, tool_call_id: str | None) -> ResultatOutil:
+    """Endpoint « jeu » de veille.py : un appel `interroger` sur UN jeu précis, puis compaction."""
+    spec = SPECS_JEUX[nom]
+    try:
+        appel, contexte = appel_interroger(spec, arguments, datetime.now(FUSEAU).date())
+    except ErreurArgumentsVeille as erreur:
+        return _refus(nom, f"Erreur : {erreur}", compteur, tool_call_id, arguments)
+    if appel["jeu"] not in JEUX_AUTORISES:  # garde-fou : jamais Orcet ni un jeu non prévu
+        return _refus(nom, "Erreur : jeu non autorisé.", compteur, tool_call_id, arguments)
+    resultat = await etat.hemicycle.appeler("interroger", appel, compteur, tool_call_id=tool_call_id)
+    resultat.outil, resultat.arguments = nom, dict(arguments)
+    resultat.requete_hemicycle = {"outil": "interroger", "arguments": appel}
+    if resultat.erreur:
+        return resultat
+    try:
+        contenu, sources = compacter_jeu(spec, json.loads(resultat.texte_brut), contexte)
+    except (TypeError, ValueError, AttributeError, KeyError) as erreur:
+        journal.warning("Compaction de %s impossible (%s) : résultat brut renvoyé.", nom, type(erreur).__name__)
+        return resultat
+    texte, resultat.tronque = tronquer(
+        json.dumps(contenu, ensure_ascii=False, separators=(",", ":")),
+        etat.hemicycle.config.max_caracteres_resultat,
+    )
+    compteur.caracteres_renvoyes += len(texte) - len(resultat.contenu)
+    resultat.contenu = texte
+    resultat.sources = [enrichir_source(source) for source in sources]
+    return resultat
+
+
+def cout_estime(nom: str) -> int:
+    endpoint = PAR_NOM.get(nom)
+    return endpoint.cout if endpoint else COUTS_CREDITS.get(nom, COUT_INCONNU)
+
+
+async def executer_appel(etat: EtatServeur, tool_call: Any, compteur: CompteurConversation,
+                         definitions: list[dict[str, Any]] | None = None,
+                         max_credits: int | None = None) -> tuple[ResultatOutil, bool]:
+    """Exécute un `tool_call` du modèle (ou du journaliste). Renvoie (résultat, servi depuis le cache ?).
+
+    `definitions` : endpoints autorisés pour cette question (défaut : sélection par défaut) ;
+    `max_credits` : budget de la question (défaut : CHATBOT_MAX_CREDITS_QUESTION)."""
     ident, nom, brut = lire_tool_call(tool_call)
-    if nom not in etat.noms_outils:
-        return _refus(nom, f"Erreur : l'outil « {nom} » n'est pas disponible. Outils : {', '.join(etat.noms_outils)}.",
+    definitions = etat.outils if definitions is None else definitions
+    noms = [d["function"]["name"] for d in definitions]
+    if nom not in noms:
+        return _refus(nom, f"Erreur : l'outil « {nom} » n'est pas disponible. Outils : {', '.join(noms)}.",
                       compteur, ident), False
+    proprietes = next(set((d["function"].get("parameters") or {}).get("properties") or {})
+                      for d in definitions if d["function"]["name"] == nom)
     if isinstance(brut, str):
         try:
             arguments = json.loads(brut) if brut.strip() else {}
@@ -881,7 +1106,7 @@ async def executer_appel(etat: EtatServeur, tool_call: Any, compteur: CompteurCo
     if not isinstance(arguments, dict):
         return _refus(nom, f"Erreur : les arguments de « {nom} » doivent être un objet JSON.", compteur, ident), False
     arguments = {cle: valeur for cle, valeur in arguments.items() if valeur is not None}
-    arguments = corriger_noms_parametres(arguments, etat.schemas.get(nom, set()))
+    arguments = corriger_noms_parametres(arguments, proprietes)
 
     # Cache : même outil, mêmes arguments, résultat récent → 0 crédit.
     cle_cache = (nom, json.dumps(arguments, sort_keys=True, ensure_ascii=False))
@@ -894,10 +1119,11 @@ async def executer_appel(etat: EtatServeur, tool_call: Any, compteur: CompteurCo
         return resultat, True
 
     # Plafonds de crédits (par question, et depuis le démarrage du serveur).
-    cout = COUTS_CREDITS.get("interroger" if nom in OUTILS_LOCAUX else nom, COUT_INCONNU)
+    cout = cout_estime(nom)
     deja = max(compteur.credits_estimes, compteur.credits_factures)
+    budget = max_credits or etat.parametres.max_credits_question
     if not compteur.limite_atteinte:
-        if deja + cout > etat.parametres.max_credits_question:
+        if deja + cout > budget:
             return _refus(nom, "Limite atteinte : budget de crédits de la question épuisé. N'appelle plus d'outil ; "
                           "réponds avec les résultats déjà obtenus.", compteur, ident, arguments), False
         if etat.credits_serveur + cout > etat.parametres.max_credits_serveur:
@@ -906,13 +1132,19 @@ async def executer_appel(etat: EtatServeur, tool_call: Any, compteur: CompteurCo
 
     if nom in OUTILS_LOCAUX:
         resultat = await _executer_local(etat, nom, arguments, compteur, ident)
+    elif nom in SPECS_JEUX:
+        resultat = await _executer_jeu(etat, nom, arguments, compteur, ident)
     else:
         resultat = await etat.hemicycle.appeler(nom, arguments, compteur, tool_call_id=ident)
         resultat.sources = [enrichir_source(source) for source in resultat.sources]
         resultat.arguments = resultat.arguments or arguments
+        if nom == "lire_acteur" and not resultat.erreur:
+            completer_source_acteur(resultat)
 
     if resultat.credits_factures is not None:
         etat.credits_serveur += resultat.credits_factures
+    if resultat.solde_restant is not None:
+        etat.solde = resultat.solde_restant
     if resultat.fatal:
         etat.acces_refuse = resultat.statut_refus
         journal.error("Hémicycle refuse l'accès (HTTP %s) : vérifier la clé et le solde.", resultat.statut_refus)
@@ -972,36 +1204,133 @@ def _historique(messages: list[MessageHistorique]) -> list[dict[str, Any]]:
     ]
 
 
+class SelectionInvalide(ValueError):
+    """Endpoints demandés inconnus ou indisponibles (→ HTTP 400)."""
+
+
+def choisir_selection(etat: EtatServeur, outils: list[str] | None) -> list[str]:
+    """Endpoints autorisés pour une question : ceux choisis par le journaliste, sinon la sélection par défaut."""
+    if outils is None:
+        return [nom for nom in SELECTION_DEFAUT if nom in etat.definitions]
+    demandes = list(dict.fromkeys(nom.strip() for nom in outils if nom and nom.strip()))
+    if not demandes:
+        raise SelectionInvalide("Choisissez au moins un endpoint Hémicycle.")
+    inconnus = [nom for nom in demandes if nom not in etat.definitions]
+    if inconnus:
+        raise SelectionInvalide(
+            f"Endpoint(s) inconnu(s) ou indisponible(s) : {', '.join(inconnus)}. Voir GET /api/catalogue."
+        )
+    return demandes
+
+
+def apercu_requete(nom: str, brut: Any, definitions: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Requête REST équivalente à un appel d'endpoint, calculée AVANT l'appel (étape « hemicycle » du flux).
+
+    Mêmes traductions que l'exécution (noms de paramètres corrigés, filtres des endpoints « jeu »,
+    arguments par défaut) ; None si l'endpoint n'est pas autorisé ou si ses arguments sont invalides."""
+    proprietes = next((set((d["function"].get("parameters") or {}).get("properties") or {})
+                       for d in definitions if d["function"]["name"] == nom), None)
+    if proprietes is None:
+        return None
+    try:
+        arguments = json.loads(brut) if isinstance(brut, str) and brut.strip() else (brut or {})
+        if not isinstance(arguments, dict):
+            return None
+        arguments = corriger_noms_parametres({c: v for c, v in arguments.items() if v is not None}, proprietes)
+        aujourd_hui = datetime.now(FUSEAU).date()
+        if nom == "derniers_scrutins":
+            return requete_rest("interroger", arguments_derniers_scrutins(arguments))
+        if nom == "agenda_seances":
+            return requete_rest("interroger", arguments_agenda(arguments, aujourd_hui)[0])
+        if nom in SPECS_JEUX:
+            return requete_rest("interroger", appel_interroger(SPECS_JEUX[nom], arguments, aujourd_hui)[0])
+        return requete_rest(nom, {**ARGUMENTS_PAR_DEFAUT.get(nom, {}), **arguments})
+    except (ValueError, TypeError, AttributeError, KeyError):  # ErreurArguments* sont des ValueError
+        return None
+
+
+def ligne_appel(resultat: ResultatOutil, depuis_cache: bool, lance_par: str, etape: int | None) -> dict[str, Any]:
+    """Entrée de `outils_utilises` : l'endpoint, ses arguments et l'appel Hémicycle réellement envoyé."""
+    requete = resultat.requete_hemicycle
+    return {
+        "outil": resultat.outil,
+        "titre": PAR_NOM[resultat.outil].titre if resultat.outil in PAR_NOM else resultat.outil,
+        "arguments": resultat.arguments,
+        "statut": "erreur" if resultat.erreur else ("cache" if depuis_cache else "ok"),
+        "message": resultat.contenu[:300] if resultat.erreur else None,
+        "credits": resultat.credits_factures or 0,
+        "nb_sources": len(resultat.sources),
+        "duree_s": resultat.duree_s,
+        "requete": requete_rest(requete["outil"], requete["arguments"]) if requete else None,
+        "lance_par": lance_par,
+        "etape": etape,
+    }
+
+
+# Étapes envoyées par POST /chat/flux (code → message) ; « hemicycle » reçoit le titre de l'endpoint.
+MESSAGES_ETAPES = {
+    "rapport": "Lecture du rapport…",
+    "analyse": "Analyse de la question…",
+    "hemicycle": "Recherche dans Hémicycle : {titre}…",
+    "rapport_section": "Recherche dans le rapport…",
+    "recherche_auto": "Recherche automatique dans Hémicycle…",
+    "redaction": "Rédaction de la réponse…",
+    "verification": "Vérification des sources…",
+}
+Signaler = Callable[[dict[str, Any]], Awaitable[None]]
+
+
 async def repondre(etat: EtatServeur, question: str, historique: list[MessageHistorique],
-                   reflexion: bool | None = None, mois: str | None = None) -> dict[str, Any]:
+                   reflexion: bool | None = None, mois: str | None = None, outils: list[str] | None = None,
+                   budget: int | None = None, max_appels: int | None = None,
+                   signaler: Signaler | None = None) -> dict[str, Any]:
     """Répond à une question. Avec `mois` : chatbot du rapport (rapport + outils de sections + Hémicycle).
-    Sans `mois` : outil de rédaction des journalistes (Hémicycle seulement)."""
+    Sans `mois` : outil de rédaction des journalistes (Hémicycle seulement), avec les endpoints
+    choisis (`outils`), un budget de crédits (`budget`) et un nombre d'appels (`max_appels`).
+
+    `signaler` (POST /chat/flux) : fonction asynchrone appelée avec chaque événement de progression,
+    ``{"type": "etape", "code", "message", "t", …}`` ou ``{"type": "appel", "appel", "indice"}``.
+    Sans effet sur la réponse renvoyée."""
     debut = time.perf_counter()
+
+    async def signaler_etape(code: str, **extra: Any) -> None:
+        if signaler is not None:
+            titre = extra.pop("titre", "")
+            await signaler({"type": "etape", "code": code, "message": MESSAGES_ETAPES[code].format(titre=titre),
+                            "t": round(time.perf_counter() - debut, 1), **extra})
     reflexion = etat.parametres.reflexion if reflexion is None else reflexion
     # Lève NumeroInvalide / RapportIntrouvable (convertis en 400 / 404 par la route /chat).
     rapport = OutilsRapport(mois) if mois else None
+    # Le chatbot du rapport garde la sélection par défaut ; lève SelectionInvalide (→ 400).
+    selection = choisir_selection(etat, None if rapport else outils)
+    budget = min(budget or etat.parametres.max_credits_question, etat.parametres.max_credits_plafond)
     if MOTIF_AIDE.match(question):
         return {
-            "reponse": MESSAGE_AIDE, "sources": [], "outils_utilises": [], "credits": 0, "avertissements": [],
-            "actions": [],
+            "reponse": MESSAGE_AIDE, "lignes": [], "sources": [], "outils_utilises": [], "credits": 0,
+            "avertissements": [], "actions": [],
             "meta": {"modele": etat.llm.modele, "duree_s": 0.0, "appels_llm": 0, "garde_fou": "aide"},
         }
+    if rapport:
+        await signaler_etape("rapport")
 
     aujourd_hui = datetime.now(FUSEAU).date()
     compteur = etat.hemicycle.nouveau_compteur()
-    systeme = prompt_systeme(aujourd_hui, compteur.max_appels)
+    if max_appels and not rapport:
+        compteur.max_appels = max(1, min(max_appels, etat.parametres.max_appels_plafond))
+    systeme = (prompt_lecteur(rapport, aujourd_hui, compteur.max_appels) if rapport
+               else prompt_systeme(aujourd_hui, compteur.max_appels, selection))
+    definitions_requete = [etat.definitions[nom] for nom in selection]
     outils_rapport = rapport.outils_openai() if rapport else []
-    schemas_rapport = {
-        d["function"]["name"]: set(d["function"].get("parameters", {}).get("properties", {}))
-        for d in outils_rapport
+    schemas_requete = {
+        d["function"]["name"]: set((d["function"].get("parameters") or {}).get("properties") or {})
+        for d in definitions_requete + outils_rapport
     }
-    if rapport:
-        systeme += prompt_lecteur(rapport)
     messages: list[dict[str, Any]] = [
         {"role": "system", "content": systeme}, *_historique(historique), {"role": "user", "content": question},
     ]
     resultats: list[ResultatOutil] = []
     outils_utilises: list[dict[str, Any]] = []
+    appels_reussis: list[tuple[int, ResultatOutil]] = []  # (indice dans outils_utilises, résultat)
     latences: list[float] = []
     tokens = {"entree": 0, "sortie": 0}
     taille_reflexion = 0
@@ -1013,34 +1342,43 @@ async def repondre(etat: EtatServeur, question: str, historique: list[MessageHis
 
     async def executer_lot(appels: list[Any], etape: int) -> None:
         """Exécute des appels d'outils et ajoute les messages `role: tool` à la conversation."""
+        dans_le_rapport = False  # une seule étape « rapport_section » pour des outils du rapport consécutifs
         for tool_call in appels:
-            if rapport and rapport.gere(tool_call.function.name):
+            _, nom_outil, brut = lire_tool_call(tool_call)
+            if rapport and rapport.gere(nom_outil):
                 # Outils du rapport : locaux, gratuits, ils produisent des `actions` pour la page.
+                if not dans_le_rapport:
+                    await signaler_etape("rapport_section")
+                    dans_le_rapport = True
                 message_tool, _ = rapport.executer(tool_call)
                 messages.append(message_tool)
                 outils_utilises.append({**rapport.appels[-1], "lance_par": "modele", "etape": etape})
                 continue
-            resultat, depuis_cache = await executer_appel(etat, tool_call, compteur)
+            dans_le_rapport = False
+            await signaler_etape(
+                "hemicycle", titre=PAR_NOM[nom_outil].titre if nom_outil in PAR_NOM else nom_outil,
+                outil=nom_outil, requete=apercu_requete(nom_outil, brut, definitions_requete),
+            )
+            resultat, depuis_cache = await executer_appel(etat, tool_call, compteur, definitions_requete, budget)
             resultats.append(resultat)
             messages.append(resultat.message_openai())
-            outils_utilises.append({
-                "outil": resultat.outil,
-                "arguments": resultat.arguments,
-                "statut": "erreur" if resultat.erreur else ("cache" if depuis_cache else "ok"),
-                "credits": resultat.credits_factures or 0,
-                "nb_sources": len(resultat.sources),
-                "duree_s": resultat.duree_s,
-                "lance_par": "serveur" if str(tool_call.id).startswith("recherche_auto_") else "modele",
-                "etape": etape,
-            })
+            lance_par = "serveur" if str(tool_call.id).startswith("recherche_auto_") else "modele"
+            ligne = ligne_appel(resultat, depuis_cache, lance_par, etape)
+            outils_utilises.append(ligne)
+            if not resultat.erreur:
+                appels_reussis.append((len(outils_utilises) - 1, resultat))
+            if signaler is not None:
+                await signaler({"type": "appel", "appel": ligne, "indice": len(outils_utilises) - 1})
         if compteur.limite_atteinte:
             messages[-1]["content"] += NOTE_LIMITE
 
     for tour in range(compteur.max_appels + 2):
         avec_outils = not compteur.limite_atteinte
         reflexion_tour = reflexion or (tour == 0 and avec_outils and etat.parametres.reflexion_premier_tour)
-        reponse = await _appeler_llm(etat, messages, (etat.outils + outils_rapport) if avec_outils else None,
-                                     reflexion_tour, schemas_rapport)
+        # Premier appel : analyse de la question ; ensuite, le modèle repart de résultats d'outils.
+        await signaler_etape("analyse" if tour == 0 else "redaction")
+        reponse = await _appeler_llm(etat, messages, (definitions_requete + outils_rapport) if avec_outils else None,
+                                     reflexion_tour, schemas_requete)
         appels_en_texte += getattr(reponse, "appels_en_texte", 0)
         etapes_llm.append({
             "etape": tour + 1,
@@ -1055,30 +1393,35 @@ async def repondre(etat: EtatServeur, question: str, historique: list[MessageHis
             tokens["sortie"] += getattr(reponse.usage, "completion_tokens", 0) or 0
         taille_reflexion += len(reponse.reflexion or "")
         if (not reponse.appels_outils and not resultats and not (rapport and rapport.appels)
-                and avec_outils and not recherche_auto):
+                and avec_outils and not recherche_auto and not hors_perimetre(reponse.texte)):
             # Le modèle a répondu sans chercher : sa réponse ne peut pas venir d'Hémicycle.
             # Le serveur lance lui-même la recherche avec les mots-clés de la question,
             # puis redonne la main au modèle avec les résultats.
             recherche_auto = True
-            appels = appels_recherche_automatique(question)
-            journal.info("Aucun outil appelé par le modèle : recherche automatique %s",
-                         [(a.function.name, a.function.arguments) for a in appels])
-            messages.append({
-                "role": "assistant", "content": None,
-                "tool_calls": [
-                    {"id": a.id, "type": "function",
-                     "function": {"name": a.function.name, "arguments": a.function.arguments}}
-                    for a in appels
-                ],
-            })
-            await executer_lot(appels, tour + 1)
-            continue
+            appels = appels_recherche_automatique(question, selection)
+            if appels:
+                journal.info("Aucun outil appelé par le modèle : recherche automatique %s",
+                             [(a.function.name, a.function.arguments) for a in appels])
+                await signaler_etape("recherche_auto")
+                messages.append({
+                    "role": "assistant", "content": None,
+                    "tool_calls": [
+                        {"id": a.id, "type": "function",
+                         "function": {"name": a.function.name, "arguments": a.function.arguments}}
+                        for a in appels
+                    ],
+                })
+                await executer_lot(appels, tour + 1)
+                continue
         if not reponse.appels_outils or not avec_outils:
             break
         messages.append(reponse.message_assistant())
         await executer_lot(reponse.appels_outils, tour + 1)
 
-    texte, puces_coupees = limiter_puces(nettoyer_reponse(reponse.texte if reponse else ""))
+    await signaler_etape("verification")
+    texte = nettoyer_reponse(reponse.texte if reponse else "")
+    # Outil de rédaction : réponses en MAX_PUCES puces au plus. Chatbot du rapport (démo) : pas de limite.
+    texte, puces_coupees = (texte, False) if rapport else limiter_puces(texte)
     if reponse is not None and reponse.raison_fin == "length" and texte:
         texte += " […]"
     consultees = [source for resultat in resultats if not resultat.erreur for source in resultat.sources]
@@ -1087,8 +1430,11 @@ async def repondre(etat: EtatServeur, question: str, historique: list[MessageHis
 
     sources_rapport = rapport.sources() if rapport else []
 
+    if not consultees and not sources_rapport and hors_perimetre(texte):
+        # Refus demandé par le prompt lecteur : réponse fixe, sans source ni recherche.
+        texte, sources, garde_fou = MESSAGE_HORS_PERIMETRE, [], "hors_perimetre"
     # Garde-fou : aucune source (ni Hémicycle, ni section du rapport) → aucun contenu factuel du modèle.
-    if not consultees and not sources_rapport:
+    elif not consultees and not sources_rapport:
         garde_fou = "aucune_source"
         if texte and texte != MESSAGE_INTROUVABLE:
             journal.info("Réponse du modèle écartée (aucune source) : %d caractères.", len(texte))
@@ -1124,6 +1470,10 @@ async def repondre(etat: EtatServeur, question: str, historique: list[MessageHis
 
     credits = sum(appel["credits"] for appel in outils_utilises)
     duree = round(time.perf_counter() - debut, 1)
+    # Chaque ligne de la réponse, avec les appels Hémicycle dont elle reprend une donnée (affichés à droite).
+    lignes = [] if garde_fou else attribuer_lignes(
+        texte, [(indice, r.contenu, r.sources) for indice, r in appels_reussis]
+    )
     if etat.parametres.trace:
         _tracer(etat, {
             "date": datetime.now(FUSEAU).isoformat(timespec="seconds"), "question": question,
@@ -1136,6 +1486,7 @@ async def repondre(etat: EtatServeur, question: str, historique: list[MessageHis
     )
     return {
         "reponse": texte,
+        "lignes": lignes,
         "sources": sources,
         "outils_utilises": outils_utilises,
         "credits": credits,
@@ -1158,6 +1509,10 @@ async def repondre(etat: EtatServeur, question: str, historique: list[MessageHis
             "recherche_automatique": recherche_auto,
             "appels_outils_en_texte": appels_en_texte,
             "credits_serveur": etat.credits_serveur,
+            "outils_choisis": selection,
+            "budget_credits": budget,
+            "max_appels": compteur.max_appels,
+            "solde_hemicycle": etat.solde,
         },
     }
 
@@ -1182,16 +1537,38 @@ class RequeteChat(BaseModel):
     mois: str | None = None
     # Option de test : forcer la réflexion de Qwen 3 pour cette question (défaut : CHATBOT_REFLEXION).
     reflexion: bool | None = None
+    # Outil de rédaction : endpoints que le modèle peut appeler (noms de GET /api/catalogue ;
+    # défaut : sélection « Essentiel »), budget de crédits et nombre d'appels pour la question
+    # (plafonnés par CHATBOT_MAX_CREDITS_QUESTION_PLAFOND et CHATBOT_MAX_TOOL_CALLS_PLAFOND).
+    outils: list[str] | None = Field(default=None, max_length=40)
+    budget_credits: int | None = Field(default=None, ge=1, le=200)
+    max_appels: int | None = Field(default=None, ge=1, le=20)
 
 
-def _definitions_outils(hemicycle: OutilsHemicycle, exposes_mcp: list[str]) -> list[dict[str, Any]]:
-    definitions = [OUTIL_DERNIERS_SCRUTINS, OUTIL_AGENDA_SEANCES]
-    for definition in hemicycle.outils_openai(noms=[n for n in exposes_mcp if n in hemicycle.noms_autorises]):
-        nom = definition["function"]["name"]
-        if nom in DESCRIPTIONS_SURCHARGEES:
-            definition["function"]["description"] = DESCRIPTIONS_SURCHARGEES[nom]
-        definitions.append(definition)
-    return definitions
+class RequeteAppel(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    outil: str = Field(min_length=1, max_length=60)
+    arguments: dict[str, Any] = Field(default_factory=dict)
+
+
+def construire_catalogue(hemicycle: OutilsHemicycle) -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
+    """Définitions OpenAI de chaque endpoint disponible, et raison de chaque endpoint indisponible."""
+    schemas_mcp = {d["function"]["name"]: d["function"] for d in hemicycle.outils_openai()}
+    definitions: dict[str, dict[str, Any]] = {}
+    indisponibles: dict[str, str] = {}
+    for endpoint in ENDPOINTS:
+        if endpoint.type == "mcp" and endpoint.nom not in hemicycle.config.liste_blanche:
+            indisponibles[endpoint.nom] = "désactivé par CHATBOT_MCP_OUTILS"
+            continue
+        if endpoint.type in ("jeu", "local") and "interroger" not in hemicycle.noms_autorises:
+            indisponibles[endpoint.nom] = "outil MCP « interroger » absent du serveur"
+            continue
+        definition = definition_endpoint(endpoint, OUTILS_LOCAUX, schemas_mcp)
+        if definition is None:
+            indisponibles[endpoint.nom] = "absent du serveur MCP d'Hémicycle"
+        else:
+            definitions[endpoint.nom] = definition
+    return definitions, indisponibles
 
 
 @asynccontextmanager
@@ -1199,18 +1576,29 @@ async def cycle_de_vie(app: FastAPI):
     parametres = charger_parametres()
     config_llm = charger_config()  # FEATHERLESS_MODEL (variable d'environnement ou .env)
     config_mcp = charger_config_mcp()
-    exposes_mcp = [nom for nom in OUTILS_MCP_REDACTION if nom in config_mcp.liste_blanche]
-    # `interroger` est ajouté pour les outils locaux uniquement : il n'est jamais exposé au modèle.
-    config_mcp = replace(config_mcp, liste_blanche=tuple(dict.fromkeys((*exposes_mcp, "interroger"))))
+    # Liste blanche : les outils MCP du catalogue (veille.py), restreints par CHATBOT_MCP_OUTILS s'il est
+    # renseigné. `interroger` sert aux endpoints « jeu » et « local » : il n'est jamais exposé au modèle.
+    restriction = {nom.strip() for nom in os.environ.get("CHATBOT_MCP_OUTILS", "").split(",") if nom.strip()}
+    noms_mcp = [e.nom for e in ENDPOINTS if e.type == "mcp" and (not restriction or e.nom in restriction)]
+    config_mcp = replace(config_mcp, liste_blanche=tuple(dict.fromkeys((*noms_mcp, "interroger"))))
     async with ClientFeatherlessAsync(config_llm) as llm, OutilsHemicycle(config_mcp) as hemicycle:
         # Les instructions du serveur MCP (« appelez guide », « interroger »…) ne sont pas transmises au modèle.
+        definitions, indisponibles = construire_catalogue(hemicycle)
         etat = EtatServeur(
             parametres=parametres,
             llm=llm,
             hemicycle=hemicycle,
-            outils=_definitions_outils(hemicycle, exposes_mcp),
+            outils=[definitions[nom] for nom in SELECTION_DEFAUT if nom in definitions],
             verrou_llm=asyncio.Semaphore(parametres.concurrence_llm),
+            definitions=definitions,
+            indisponibles=indisponibles,
         )
+        try:
+            etat.solde = await hemicycle.solde_credits()  # gratuit
+        except Exception as erreur:  # le solde est un confort d'affichage : on démarre quand même
+            journal.warning("Solde Hémicycle illisible au démarrage : %s", type(erreur).__name__)
+        if indisponibles:
+            journal.warning("Endpoints indisponibles : %s", indisponibles)
         app.state.etat = etat
         journal.info(
             "Prêt : modèle %s, réflexion %s, outils %s, plafonds %d crédits/question et %d depuis le démarrage",
@@ -1224,6 +1612,8 @@ async def cycle_de_vie(app: FastAPI):
 
 app = FastAPI(title="Outil de rédaction Hémicycle", lifespan=cycle_de_vie, docs_url=None, redoc_url=None)
 app.include_router(routeur_rapport)  # GET /api/rapport/{mois}, GET /api/rapports
+# CORS ouvert à toutes les origines (démo) : le site peut être servi ailleurs que par ce serveur.
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
 @app.get("/", include_in_schema=False)
@@ -1244,9 +1634,42 @@ async def lire_etat(request: Request) -> dict[str, Any]:
         "max_credits_question": etat.parametres.max_credits_question,
         "credits_serveur": etat.credits_serveur,
         "plafond_credits_serveur": etat.parametres.max_credits_serveur,
+        "solde_hemicycle": etat.solde,
+        "nb_endpoints": len(etat.definitions),
         "requetes_featherless": etat.llm.nb_requetes,
         "acces_hemicycle_refuse": etat.acces_refuse,
         "demarre_le": etat.demarre_le,
+    }
+
+
+def erreur_http(etat: EtatServeur, erreur: Exception) -> tuple[int, str] | None:
+    """Exception levée par `repondre` → (statut HTTP, message pour l'utilisateur), journalisée au besoin.
+
+    Partagé par POST /chat (HTTPException) et POST /chat/flux (événement « erreur »). None : exception
+    inattendue (HTTP 500)."""
+    if isinstance(erreur, (NumeroInvalide, SelectionInvalide)):
+        return 400, str(erreur)
+    if isinstance(erreur, RapportIntrouvable):
+        return 404, str(erreur)
+    if isinstance(erreur, ConcurrenceDepassee):
+        return 503, "Le modèle est saturé (Featherless, HTTP 429). Réessayez dans une minute."
+    if isinstance(erreur, (openai.AuthenticationError, openai.PermissionDeniedError)):
+        journal.error("Featherless refuse l'accès : HTTP %s", erreur.status_code)
+        return 502, f"Featherless refuse l'accès (HTTP {erreur.status_code}) : vérifier la clé."
+    if isinstance(erreur, openai.APIStatusError):
+        journal.error("Featherless : HTTP %s : %s", erreur.status_code, etat.masquer(str(erreur))[:300])
+        return 502, f"Erreur du modèle (Featherless, HTTP {erreur.status_code}). Réessayez."
+    if isinstance(erreur, (openai.APITimeoutError, openai.APIConnectionError)):
+        journal.error("Featherless injoignable : %s", type(erreur).__name__)
+        return 504, "Le modèle ne répond pas (Featherless injoignable ou trop lent). Réessayez."
+    return None
+
+
+def _arguments_repondre(requete: RequeteChat) -> dict[str, Any]:
+    return {
+        "question": requete.question.strip(), "historique": requete.historique, "reflexion": requete.reflexion,
+        "mois": requete.mois, "outils": requete.outils, "budget": requete.budget_credits,
+        "max_appels": requete.max_appels,
     }
 
 
@@ -1254,23 +1677,155 @@ async def lire_etat(request: Request) -> dict[str, Any]:
 async def chat(requete: RequeteChat, request: Request) -> JSONResponse:
     etat: EtatServeur = request.app.state.etat
     try:
-        corps = await repondre(etat, requete.question.strip(), requete.historique, requete.reflexion, requete.mois)
-    except NumeroInvalide as erreur:
-        raise HTTPException(400, str(erreur))
-    except RapportIntrouvable as erreur:
-        raise HTTPException(404, str(erreur))
-    except ConcurrenceDepassee:
-        raise HTTPException(503, "Le modèle est saturé (Featherless, HTTP 429). Réessayez dans une minute.")
-    except (openai.AuthenticationError, openai.PermissionDeniedError) as erreur:
-        journal.error("Featherless refuse l'accès : HTTP %s", erreur.status_code)
-        raise HTTPException(502, f"Featherless refuse l'accès (HTTP {erreur.status_code}) : vérifier la clé.")
-    except openai.APIStatusError as erreur:
-        journal.error("Featherless : HTTP %s : %s", erreur.status_code, etat.masquer(str(erreur))[:300])
-        raise HTTPException(502, f"Erreur du modèle (Featherless, HTTP {erreur.status_code}). Réessayez.")
-    except (openai.APITimeoutError, openai.APIConnectionError) as erreur:
-        journal.error("Featherless injoignable : %s", type(erreur).__name__)
-        raise HTTPException(504, "Le modèle ne répond pas (Featherless injoignable ou trop lent). Réessayez.")
+        corps = await repondre(etat, **_arguments_repondre(requete))
+    except Exception as erreur:
+        statut = erreur_http(etat, erreur)
+        if statut is None:
+            raise
+        raise HTTPException(*statut) from erreur
     return JSONResponse(corps)
+
+
+ENTETES_FLUX = {"Cache-Control": "no-store", "X-Accel-Buffering": "no"}
+
+
+def ligne_ndjson(evenement: dict[str, Any]) -> str:
+    """Un événement du flux : un objet JSON sur une ligne (les retours à la ligne des textes sont échappés)."""
+    return json.dumps(evenement, ensure_ascii=False, default=str) + "\n"
+
+
+@app.post("/chat/flux")
+async def chat_flux(requete: RequeteChat, request: Request) -> StreamingResponse:
+    """Comme POST /chat, mais la progression arrive au fil de l'eau (NDJSON, un événement par ligne) :
+    étapes (`etape`), appels Hémicycle terminés (`appel`), puis `reponse` (le JSON de /chat) ou `erreur`.
+    Contrat détaillé dans docs/ARCHITECTURE.md. Si le client se déconnecte, la question est abandonnée
+    (tâche annulée : plus d'appel au modèle ni à Hémicycle)."""
+    etat: EtatServeur = request.app.state.etat
+    arguments = _arguments_repondre(requete)
+    file: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
+
+    async def produire() -> None:
+        try:
+            corps = await repondre(etat, **arguments, signaler=file.put)
+            await file.put({"type": "reponse", "donnees": corps})
+        except asyncio.CancelledError:
+            raise
+        except Exception as erreur:
+            statut = erreur_http(etat, erreur)
+            if statut is None:
+                journal.error("Erreur inattendue (/chat/flux) :\n%s",
+                              etat.masquer("".join(traceback.format_exception(erreur))))
+                statut = (500, "Erreur interne du serveur.")
+            await file.put({"type": "erreur", "statut": statut[0], "detail": statut[1]})
+        finally:
+            file.put_nowait(None)  # fin du flux
+
+    async def flux():
+        tache = asyncio.create_task(produire())
+        try:
+            while (evenement := await file.get()) is not None:
+                yield ligne_ndjson(evenement)
+        finally:
+            # Client déconnecté (Starlette annule l'itération) : on annule aussi la question en cours,
+            # pour ne pas continuer à consommer des crédits pour personne.
+            if not tache.done():
+                tache.cancel()
+                journal.info("Client déconnecté pendant /chat/flux : question annulée.")
+
+    return StreamingResponse(flux(), media_type="application/x-ndjson", headers=ENTETES_FLUX)
+
+
+@app.get("/api/catalogue")
+async def catalogue(request: Request) -> dict[str, Any]:
+    """Les endpoints de la veille : ce que le journaliste peut activer, leur coût et l'appel Hémicycle."""
+    etat: EtatServeur = request.app.state.etat
+    aujourd_hui = datetime.now(FUSEAU).date()
+    endpoints = []
+    for e in ENDPOINTS:
+        definition = etat.definitions.get(e.nom)
+        exemple = remplacer_jours(e.exemple, aujourd_hui)
+        if e.type == "mcp":
+            requete = requete_rest(e.nom, exemple)
+        elif e.type == "jeu":
+            try:
+                appel, _ = appel_interroger(SPECS_JEUX[e.nom], exemple, aujourd_hui)
+            except ErreurArgumentsVeille:
+                appel = {"jeu": e.jeu}
+            requete = requete_rest("interroger", appel)
+        else:
+            requete = requete_rest("interroger", {"jeu": e.jeu})
+        endpoints.append({
+            "nom": e.nom,
+            "titre": e.titre,
+            "categorie": e.categorie,
+            "type": e.type,
+            "outil_mcp": e.outil_mcp,
+            "jeu": e.jeu,
+            "cout": e.cout,
+            "description": (definition or {}).get("function", {}).get("description") or e.description or e.titre,
+            "parametres": (definition or {}).get("function", {}).get("parameters") or {"type": "object", "properties": {}},
+            "exemple": exemple,
+            "requete_exemple": requete,
+            "disponible": definition is not None,
+            "raison": etat.indisponibles.get(e.nom),
+            "par_defaut": e.nom in SELECTION_DEFAUT,
+        })
+    return {
+        "categories": CATEGORIES,
+        "endpoints": endpoints,
+        "preselections": PRESELECTIONS,
+        "non_proposes": NON_PROPOSES,
+        "budget": {"defaut": etat.parametres.max_credits_question, "plafond": etat.parametres.max_credits_plafond},
+        "appels": {"defaut": etat.hemicycle.config.max_appels_par_question, "plafond": etat.parametres.max_appels_plafond},
+        "api": {"base": "https://api.hemicycle.ai", "version": "2026-10-01", "mcp": etat.hemicycle.config.url,
+                "remarque": "Le serveur appelle Hémicycle par son serveur MCP ; la requête REST est l'équivalent "
+                            "documenté (docs/API_HEMICYCLE.md)."},
+    }
+
+
+MAX_CARACTERES_BRUT = 300_000
+
+
+@app.post("/api/appel")
+async def appel_direct(requete: RequeteAppel, request: Request) -> JSONResponse:
+    """Appel direct d'un endpoint par le journaliste, sans le modèle (mêmes plafonds de crédits)."""
+    etat: EtatServeur = request.app.state.etat
+    definition = etat.definitions.get(requete.outil)
+    if definition is None:
+        raise HTTPException(404, f"Endpoint inconnu ou indisponible : {requete.outil}. Voir GET /api/catalogue.")
+    compteur = etat.hemicycle.nouveau_compteur()
+    compteur.max_appels = 1
+    tool_call = SimpleNamespace(
+        id="direct", type="function",
+        function=SimpleNamespace(name=requete.outil, arguments=json.dumps(requete.arguments, ensure_ascii=False)),
+    )
+    debut = time.perf_counter()
+    resultat, depuis_cache = await executer_appel(etat, tool_call, compteur, [definition],
+                                                  etat.parametres.max_credits_plafond)
+    try:
+        compact: Any = json.loads(resultat.contenu)
+    except ValueError:
+        compact = resultat.contenu
+    brut: Any = None
+    if not resultat.erreur and resultat.texte_brut:
+        texte_brut = resultat.texte_brut[:MAX_CARACTERES_BRUT]
+        try:
+            brut = json.loads(texte_brut)
+        except ValueError:
+            brut = texte_brut
+    appel = ligne_appel(resultat, depuis_cache, "journaliste", None)
+    return JSONResponse({
+        **appel,
+        "resultat": compact,
+        "brut": brut,
+        "brut_tronque": len(resultat.texte_brut) > MAX_CARACTERES_BRUT,
+        "taille_brute": resultat.taille_brute,
+        "tronque": resultat.tronque,
+        "sources": resultat.sources,
+        "duree_totale_s": round(time.perf_counter() - debut, 2),
+        "solde_hemicycle": etat.solde,
+        "credits_serveur": etat.credits_serveur,
+    })
 
 
 def main() -> None:

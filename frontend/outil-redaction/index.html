@@ -4,37 +4,42 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Veille parlementaire</title>
-<meta name="description" content="Outil interne de la rédaction : réponses brèves et sourcées sur l'actualité de l'Assemblée nationale, à partir des données d'Hémicycle.">
+<meta name="description" content="Outil interne de la rédaction : réponses brèves et sourcées sur l'actualité du Parlement, à partir des endpoints d'Hémicycle choisis par le journaliste.">
 <style>
   :root {
     --fond: #f6f5f1;
     --carte: #ffffff;
+    --carte-2: #f1efe8;
     --texte: #1d1d1b;
     --discret: #5f5e58;
     --bordure: #dcd9cf;
     --accent: #1f4e8c;
+    --accent-doux: #e3ebf6;
     --accent-texte: #ffffff;
     --alerte-fond: #fff4d6;
     --alerte-texte: #6b4a00;
-    --non-verifie-fond: #fde8e4;
-    --non-verifie-texte: #8a2a17;
+    --cout-fort: #8a4b00;
     --erreur: #a1260d;
+    --ok: #1f6b3a;
     --rayon: 10px;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --fond: #17181a;
       --carte: #212226;
+      --carte-2: #2a2b30;
       --texte: #ecebe7;
       --discret: #a9a8a2;
       --bordure: #3a3b40;
       --accent: #7fa8e3;
+      --accent-doux: #253246;
       --accent-texte: #0f1420;
       --alerte-fond: #3b3220;
       --alerte-texte: #f2d899;
-      --non-verifie-fond: #43251f;
-      --non-verifie-texte: #f4b6a8;
+      --cout-fort: #f0b56a;
       --erreur: #ff8f78;
+      --ok: #7fd49b;
     }
   }
   * { box-sizing: border-box; }
@@ -44,45 +49,117 @@
     color: var(--texte);
     font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   }
-  main { max-width: 760px; margin: 0 auto; padding: 20px 16px 48px; }
+  main { max-width: 1080px; margin: 0 auto; padding: 20px 16px 48px; }
   header h1 { font-size: 1.35rem; margin: 0 0 4px; }
   header p { margin: 0; color: var(--discret); font-size: .92rem; }
   #etat { margin-top: 6px; font-size: .8rem; color: var(--discret); }
-  .rapides { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 10px; }
+  code, pre { font-family: var(--mono); }
+  button, select, input, textarea { font: inherit; color: var(--texte); }
   button {
-    font: inherit; cursor: pointer; border-radius: 999px;
-    border: 1px solid var(--bordure); background: var(--carte); color: var(--texte);
+    cursor: pointer; border-radius: 999px;
+    border: 1px solid var(--bordure); background: var(--carte);
     padding: 7px 14px; font-size: .9rem;
   }
   button:hover:not(:disabled) { border-color: var(--accent); }
-  button:focus-visible, textarea:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  button:disabled { opacity: .55; cursor: wait; }
-  button.principal { background: var(--accent); color: var(--accent-texte); border-color: var(--accent); font-weight: 600; }
-  form { display: flex; flex-direction: column; gap: 8px; }
-  textarea {
-    font: inherit; width: 100%; min-height: 76px; resize: vertical; padding: 10px 12px;
-    border-radius: var(--rayon); border: 1px solid var(--bordure); background: var(--carte); color: var(--texte);
+  button:focus-visible, textarea:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
   }
+  button:disabled { opacity: .55; cursor: not-allowed; }
+  button.principal { background: var(--accent); color: var(--accent-texte); border-color: var(--accent); font-weight: 600; }
+  select, input[type="text"], input[type="number"], textarea {
+    border-radius: 8px; border: 1px solid var(--bordure); background: var(--carte); padding: 6px 10px;
+  }
+
+  /* Onglets */
+  .onglets { display: flex; gap: 6px; margin: 18px 0 12px; border-bottom: 1px solid var(--bordure); }
+  .onglets button {
+    border-radius: 8px 8px 0 0; border-bottom: none; background: transparent; color: var(--discret);
+    margin-bottom: -1px;
+  }
+  .onglets button[aria-selected="true"] { background: var(--carte); color: var(--texte); border-color: var(--bordure); font-weight: 600; }
+  [hidden] { display: none !important; }
+
+  .carte {
+    background: var(--carte); border: 1px solid var(--bordure); border-radius: var(--rayon);
+    padding: 14px 16px;
+  }
+
+  /* Panneau des endpoints */
+  #panneau-endpoints > summary { cursor: pointer; font-weight: 600; list-style: none; display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; }
+  #panneau-endpoints > summary::-webkit-details-marker { display: none; }
+  #panneau-endpoints > summary::before { content: "▸"; color: var(--discret); }
+  #panneau-endpoints[open] > summary::before { content: "▾"; }
+  #resume-selection { font-weight: 400; color: var(--discret); font-size: .85rem; }
+  .reglages { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin: 12px 0 4px; font-size: .88rem; }
+  .preselections { display: flex; flex-wrap: wrap; gap: 6px; }
+  .preselections button { padding: 4px 11px; font-size: .82rem; }
+  .preselections button.actif { background: var(--accent-doux); border-color: var(--accent); }
+  .reglages label { display: inline-flex; gap: 6px; align-items: center; color: var(--discret); }
+  .categories { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; margin-top: 10px; }
+  fieldset { border: 1px solid var(--bordure); border-radius: 8px; padding: 8px 10px 6px; margin: 0; min-width: 0; }
+  legend { font-weight: 600; font-size: .85rem; padding: 0 4px; }
+  .aide-categorie { font-size: .76rem; color: var(--discret); margin: -2px 0 6px; }
+  .endpoint { display: grid; grid-template-columns: auto 1fr auto; gap: 2px 8px; align-items: start; padding: 4px 0; border-top: 1px dashed var(--bordure); }
+  .endpoint:first-of-type { border-top: none; }
+  .endpoint input { margin: 4px 0 0; }
+  .endpoint .nom { font-size: .88rem; }
+  .endpoint .route { grid-column: 2 / 4; font-family: var(--mono); font-size: .72rem; color: var(--discret); overflow-wrap: anywhere; }
+  .endpoint .description { grid-column: 2 / 4; font-size: .78rem; color: var(--discret); }
+  .endpoint.indisponible { opacity: .55; }
+  .cout { font-size: .72rem; border-radius: 4px; padding: 0 6px; border: 1px solid var(--bordure); color: var(--discret); white-space: nowrap; }
+  .cout.fort { color: var(--cout-fort); border-color: currentColor; }
+  .lien-discret { background: none; border: none; padding: 0; color: var(--accent); font-size: .76rem; cursor: pointer; text-decoration: underline; }
+  .non-proposes { margin-top: 10px; font-size: .8rem; color: var(--discret); }
+  .non-proposes ul { margin: 6px 0 0; padding-left: 18px; }
+
+  /* Questions */
+  .rapides { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 10px; }
+  form#formulaire { display: flex; flex-direction: column; gap: 8px; }
+  textarea#question { width: 100%; min-height: 76px; resize: vertical; padding: 10px 12px; border-radius: var(--rayon); }
   .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
   .actions .aide { color: var(--discret); font-size: .8rem; margin-left: auto; }
-  #attente { display: none; align-items: center; gap: 10px; margin: 16px 0; color: var(--discret); }
-  #attente.visible { display: flex; }
+
+  /* Progression */
+  #attente { display: none; margin: 16px 0; }
+  #attente.visible { display: block; }
+  .attente-tete { display: flex; align-items: center; gap: 10px; color: var(--discret); }
+  .attente-tete button { margin-left: auto; padding: 4px 12px; font-size: .82rem; }
   .rond {
-    width: 16px; height: 16px; border-radius: 50%;
+    width: 16px; height: 16px; border-radius: 50%; flex: none;
     border: 2px solid var(--bordure); border-top-color: var(--accent);
     animation: tourne 0.9s linear infinite;
   }
   @keyframes tourne { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) { .rond { animation: none; } }
+  #etapes { list-style: none; margin: 8px 0 0; padding: 0 0 0 26px; font-size: .84rem; display: flex; flex-direction: column; gap: 3px; }
+  #etapes li { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+  #etapes .t { color: var(--discret); font-variant-numeric: tabular-nums; min-width: 3.2em; }
+  #etapes .fait { color: var(--ok); }
+
+  /* Réponses */
   #fil { display: flex; flex-direction: column-reverse; gap: 14px; margin-top: 16px; }
-  .carte {
-    background: var(--carte); border: 1px solid var(--bordure); border-radius: var(--rayon);
-    padding: 14px 16px;
-  }
   .question { font-weight: 600; margin: 0 0 8px; }
-  .reponse p { margin: 0 0 6px; }
-  .reponse ul { margin: 0 0 6px; padding-left: 20px; }
-  .reponse li { margin-bottom: 4px; }
+  .reponse { display: flex; flex-direction: column; gap: 4px; }
+  .ligne { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 340px); gap: 4px 14px; align-items: start; padding: 3px 0; }
+  .ligne + .ligne { border-top: 1px dashed var(--bordure); }
+  .ligne-texte { margin: 0; }
+  .ligne-texte.puce { padding-left: 16px; position: relative; }
+  .ligne-texte.puce::before { content: "•"; position: absolute; left: 3px; color: var(--discret); }
+  .ligne-appels { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+  .appel-api {
+    font-family: var(--mono); font-size: .72rem; border-radius: 6px; padding: 2px 7px;
+    background: var(--accent-doux); border: 1px solid transparent; color: var(--texte);
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left;
+  }
+  .appel-api[aria-expanded="true"] { border-color: var(--accent); }
+  .appel-api .methode { font-weight: 700; color: var(--accent); margin-right: 4px; }
+  .detail-appel {
+    grid-column: 1 / -1; background: var(--carte-2); border-radius: 8px; padding: 8px 10px; font-size: .8rem;
+    display: flex; flex-direction: column; gap: 4px; overflow-wrap: anywhere;
+  }
+  .detail-appel pre { margin: 0; white-space: pre-wrap; font-size: .76rem; }
+  .detail-appel .etiquette { color: var(--discret); }
+  .reponse strong { font-weight: 650; }
   .avertissement {
     background: var(--alerte-fond); color: var(--alerte-texte);
     border-radius: 6px; padding: 6px 10px; font-size: .85rem; margin: 8px 0 0;
@@ -95,86 +172,165 @@
   .sources .detail { color: var(--discret); font-size: .8rem; }
   .badge {
     display: inline-block; font-size: .72rem; border-radius: 4px; padding: 1px 6px; margin-left: 4px;
-    background: var(--non-verifie-fond); color: var(--non-verifie-texte); white-space: nowrap;
+    background: transparent; border: 1px solid var(--bordure); color: var(--discret); white-space: nowrap;
   }
-  .badge.neutre { background: transparent; border: 1px solid var(--bordure); color: var(--discret); }
   .pied {
     display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
     margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--bordure);
     font-size: .82rem; color: var(--discret);
   }
   .pied button { margin-left: auto; padding: 5px 12px; font-size: .85rem; }
-  details { font-size: .8rem; color: var(--discret); margin-top: 6px; }
-  details pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 6px 0 0; }
-  /* Appels API : déroulé des appels Featherless (LLM) et Hémicycle (outils) */
   .appels { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: .82rem; }
-  .appels li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 6px; overflow-wrap: anywhere; }
-  .appels li.outil { padding-left: 18px; position: relative; }
-  .appels li.outil::before { content: "↳"; position: absolute; left: 4px; color: var(--discret); }
+  .appels li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 6px; overflow-wrap: anywhere; border-radius: 6px; padding: 1px 4px; transition: background-color .6s; }
+  .appels li.outil { padding-left: 22px; position: relative; }
+  .appels li.outil::before { content: "↳"; position: absolute; left: 6px; color: var(--discret); }
+  .appels li.eclaire { background: var(--accent-doux); }
   .appels .type {
     font-size: .7rem; font-weight: 600; text-transform: uppercase; letter-spacing: .03em;
     padding: 1px 6px; border-radius: 4px; border: 1px solid var(--bordure);
   }
   .appels li.llm .type { color: var(--accent); border-color: var(--accent); }
   .appels li.outil.erreur code { color: var(--erreur); }
-  .appels code { font-size: .8rem; }
+  .appels code { font-size: .78rem; }
   .appels .discret { color: var(--discret); }
+
+  /* Appel direct */
+  .direct-grille { display: grid; grid-template-columns: minmax(0, 360px) minmax(0, 1fr); gap: 16px; align-items: start; }
+  .direct-grille > * { min-width: 0; }
+  #direct-formulaire { display: flex; flex-direction: column; gap: 10px; }
+  #direct-formulaire label.champ { display: flex; flex-direction: column; gap: 3px; font-size: .86rem; }
+  #direct-formulaire .aide-champ { font-size: .75rem; color: var(--discret); }
+  #direct-formulaire select, #direct-formulaire input, #direct-formulaire textarea { width: 100%; }
+  #direct-description { font-size: .82rem; color: var(--discret); margin: 0; }
+  .route-exemple { font-family: var(--mono); font-size: .76rem; overflow-wrap: anywhere; }
+  #direct-resultat { display: flex; flex-direction: column; gap: 10px; }
+  pre.json {
+    margin: 0; max-height: 420px; overflow: auto; background: var(--carte-2); border-radius: 8px;
+    padding: 8px 10px; font-size: .75rem; white-space: pre-wrap; overflow-wrap: anywhere;
+  }
+  .tableau { overflow-x: auto; border: 1px solid var(--bordure); border-radius: 8px; max-height: 460px; }
+  table { border-collapse: collapse; font-size: .78rem; width: 100%; }
+  th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--bordure); vertical-align: top; }
+  th { position: sticky; top: 0; background: var(--carte-2); font-weight: 600; white-space: nowrap; }
+  td { min-width: 4.5em; max-width: 320px; overflow-wrap: anywhere; }
+
+  @media (max-width: 760px) {
+    .ligne { grid-template-columns: minmax(0, 1fr); }
+    .ligne-appels { justify-content: flex-start; }
+    .direct-grille { grid-template-columns: minmax(0, 1fr); }
+    .categories { grid-template-columns: minmax(0, 1fr); }
+  }
 </style>
 </head>
 <body>
 <main>
   <header>
     <h1>Veille parlementaire</h1>
-    <p>Réponses brèves sur l'actualité de l'Assemblée nationale, tirées uniquement des données d'Hémicycle. Données consultées en direct, <strong>non vérifiées par la rédaction</strong> : à recouper avant publication.</p>
+    <p>Réponses brèves sur l'actualité du Parlement, tirées uniquement des endpoints d'Hémicycle que vous choisissez. Chaque donnée est suivie de l'appel API qui l'a fournie.</p>
     <div id="etat" aria-live="polite"></div>
   </header>
 
-  <div class="rapides" role="group" aria-label="Questions rapides">
-    <button type="button" data-question="Quoi de neuf à l'Assemblée cette semaine ?">Cette semaine à l'Assemblée</button>
-    <button type="button" data-question="Quels sont les derniers scrutins à l'Assemblée ?">Derniers scrutins</button>
-    <button type="button" data-question="Quels textes sont inscrits à l'ordre du jour des séances cette semaine ?">Textes en discussion</button>
-    <button type="button" data-question="Quels ont été les votes solennels depuis le début du mois ?">Votes solennels du mois</button>
+  <div class="onglets" role="tablist" aria-label="Mode">
+    <button type="button" role="tab" id="onglet-question" aria-controls="vue-question" aria-selected="true">Poser une question</button>
+    <button type="button" role="tab" id="onglet-direct" aria-controls="vue-direct" aria-selected="false" tabindex="-1">Appeler un endpoint</button>
   </div>
 
-  <form id="formulaire">
-    <textarea id="question" name="question" aria-label="Question" maxlength="1000" placeholder="Ex. : Où en est le texte sur l'aide à mourir ?" required></textarea>
-    <div class="actions">
-      <button type="submit" class="principal" id="envoyer">Demander</button>
-      <button type="button" id="nouvelle">Nouvelle conversation</button>
-      <span class="aide">Ctrl + Entrée pour envoyer</span>
+  <!-- ===== Vue 1 : question au modèle ===== -->
+  <section id="vue-question" role="tabpanel" aria-labelledby="onglet-question">
+    <details id="panneau-endpoints" class="carte">
+      <summary>Endpoints de la veille <span id="resume-selection">chargement…</span></summary>
+      <div class="reglages">
+        <div class="preselections" id="preselections" role="group" aria-label="Sélections prêtes à l'emploi"></div>
+        <label>Budget <select id="budget" aria-label="Budget de crédits par question"></select></label>
+        <label>Appels <select id="max-appels" aria-label="Nombre maximal d'appels Hémicycle par question"></select></label>
+      </div>
+      <div class="categories" id="categories"></div>
+      <details class="non-proposes" id="non-proposes"><summary>Endpoints d'Hémicycle non proposés, et pourquoi</summary><ul></ul></details>
+    </details>
+
+    <div class="rapides" role="group" aria-label="Questions rapides">
+      <button type="button" data-question="Quoi de neuf à l'Assemblée cette semaine ?">Cette semaine à l'Assemblée</button>
+      <button type="button" data-question="Quels sont les derniers scrutins à l'Assemblée ?">Derniers scrutins</button>
+      <button type="button" data-question="Quels textes sont inscrits à l'ordre du jour des séances cette semaine ?">Textes en discussion</button>
+      <button type="button" data-question="Quels ont été les votes solennels depuis le début du mois ?">Votes solennels du mois</button>
+      <button type="button" data-question="Qu'est-ce qui est à l'ordre du jour du Sénat cette semaine ?" data-outils="senat_agenda,senat_derniers_scrutins">Agenda du Sénat</button>
+      <button type="button" data-question="Quels événements parlementaires depuis lundi ?" data-outils="fil_evenements">Fil depuis lundi</button>
     </div>
-  </form>
 
-  <div id="attente" role="status" aria-live="polite"><span class="rond" aria-hidden="true"></span><span id="attente-texte">Recherche en cours…</span></div>
+    <form id="formulaire">
+      <textarea id="question" name="question" aria-label="Question" maxlength="1000" placeholder="Ex. : Où en est le texte sur les incendies de forêt ?" required></textarea>
+      <div class="actions">
+        <button type="submit" class="principal" id="envoyer">Demander</button>
+        <button type="button" id="nouvelle">Nouvelle conversation</button>
+        <span class="aide">Ctrl + Entrée pour envoyer</span>
+      </div>
+    </form>
 
-  <section id="fil" aria-label="Réponses"></section>
+    <div id="attente" role="status" aria-live="polite">
+      <div class="attente-tete"><span class="rond" aria-hidden="true"></span><span id="attente-texte">Recherche en cours…</span><button type="button" id="annuler">Annuler</button></div>
+      <ol id="etapes"></ol>
+    </div>
+
+    <section id="fil" aria-label="Réponses"></section>
+  </section>
+
+  <!-- ===== Vue 2 : appel direct d'un endpoint ===== -->
+  <section id="vue-direct" role="tabpanel" aria-labelledby="onglet-direct" hidden>
+    <div class="direct-grille">
+      <form id="direct-formulaire" class="carte">
+        <label class="champ">Endpoint
+          <select id="direct-endpoint"></select>
+        </label>
+        <p id="direct-description"></p>
+        <div class="route-exemple" id="direct-route"></div>
+        <div id="direct-champs"></div>
+        <div class="actions">
+          <button type="submit" class="principal" id="direct-envoyer">Appeler</button>
+          <button type="button" id="direct-exemple">Remettre l'exemple</button>
+        </div>
+      </form>
+      <section id="direct-resultat" aria-live="polite">
+        <div class="carte"><p class="aide-categorie" style="margin:0">Choisissez un endpoint, réglez ses paramètres puis « Appeler ». Le serveur appelle Hémicycle (sans le modèle) et affiche la requête envoyée, le résultat tel que le modèle le verrait et la réponse brute d'Hémicycle. Mêmes plafonds de crédits que les questions.</p></div>
+      </section>
+    </div>
+  </section>
 </main>
 
 <script>
 (() => {
   "use strict";
-  const formulaire = document.getElementById("formulaire");
-  const champ = document.getElementById("question");
-  const envoyer = document.getElementById("envoyer");
-  const attente = document.getElementById("attente");
-  const attenteTexte = document.getElementById("attente-texte");
-  const fil = document.getElementById("fil");
-  const etat = document.getElementById("etat");
+  const $ = (id) => document.getElementById(id);
+  const formulaire = $("formulaire"), champ = $("question"), envoyer = $("envoyer");
+  const attente = $("attente"), attenteTexte = $("attente-texte"), listeEtapes = $("etapes");
+  const fil = $("fil"), etat = $("etat");
   let historique = [];   // [{role, contenu}] envoyé à POST /chat pour les questions de suivi
   let enCours = false;
+  let annulation = null;
+  let catalogue = null;
+  let selection = new Set();
+  let compteurCartes = 0;
+  const CLE_SELECTION = "veille.selection.v2";
 
+  // ---------- Outils DOM ----------
   function el(balise, attributs = {}, enfants = []) {
     const noeud = document.createElement(balise);
     for (const [cle, valeur] of Object.entries(attributs)) {
+      if (valeur === null || valeur === undefined || valeur === false) continue;
       if (cle === "texte") noeud.textContent = valeur;
       else if (cle === "classe") noeud.className = valeur;
-      else noeud.setAttribute(cle, valeur);
+      else noeud.setAttribute(cle, valeur === true ? "" : valeur);
     }
-    for (const enfant of [].concat(enfants)) if (enfant) noeud.append(enfant);
+    for (const enfant of [].concat(enfants)) if (enfant !== null && enfant !== undefined && enfant !== false) noeud.append(enfant);
     return noeud;
   }
+  const virgule = (n) => String(n).replace(".", ",");
+  const nombre = (n) => Number(n).toLocaleString("fr-FR");
+  const memoire = {
+    lire(cle) { try { return JSON.parse(localStorage.getItem(cle)); } catch { return null; } },
+    ecrire(cle, valeur) { try { localStorage.setItem(cle, JSON.stringify(valeur)); } catch { /* stockage indisponible */ } },
+  };
 
-  // Mise en forme minimale et sûre : texte échappé, puces et **gras** seulement.
+  // Mise en forme minimale et sûre : texte échappé, **gras** seulement.
   function enrichir(ligne) {
     const fragment = document.createDocumentFragment();
     ligne.split(/(\*\*[^*]+\*\*)/).forEach((morceau) => {
@@ -184,27 +340,197 @@
     return fragment;
   }
 
-  function afficherTexte(texte) {
-    const bloc = el("div", { classe: "reponse" });
-    let liste = null;
-    for (const brute of texte.split(/\r?\n/)) {
-      const ligne = brute.trim();
-      if (!ligne) { liste = null; continue; }
-      const puce = ligne.match(/^([-*•]|\d+[.)])\s+(.*)$/);
-      if (puce) {
-        if (!liste) { liste = el("ul"); bloc.append(liste); }
-        liste.append(el("li", {}, enrichir(puce[2])));
-      } else {
-        liste = null;
-        bloc.append(el("p", {}, enrichir(ligne)));
-      }
-    }
-    return bloc;
-  }
-
   function lienSur(url) {
     try { const u = new URL(url); return u.protocol === "https:" || u.protocol === "http:" ? u.href : null; }
     catch { return null; }
+  }
+
+  function formaterArguments(args) {
+    return Object.entries(args || {}).map(([cle, valeur]) => `${cle}: ${JSON.stringify(valeur)}`).join(", ");
+  }
+
+  function etiquetteRequete(requete, outil) {
+    if (!requete) return el("span", { texte: outil || "?" });
+    const [methode, ...reste] = requete.court.split(" ");
+    return el("span", {}, [el("span", { classe: "methode", texte: methode }), reste.join(" ")]);
+  }
+
+  function infobulleAppel(a) {
+    const r = a.requete;
+    const lignes = [];
+    if (r) lignes.push(`${r.texte}`, `Appel réel : MCP ${r.mcp}(${formaterArguments(r.arguments)})`);
+    lignes.push(`Endpoint : ${a.titre || a.outil} — ${a.statut}, ${a.credits} crédit(s)${a.duree_s != null ? ", " + virgule(a.duree_s) + " s" : ""}`);
+    return lignes.join("\n");
+  }
+
+  function detailAppel(a) {
+    const r = a.requete;
+    const bloc = el("div", { classe: "detail-appel" });
+    bloc.append(el("div", {}, [el("span", { classe: "etiquette", texte: "Endpoint : " }), `${a.titre || a.outil} `, el("code", { texte: `${a.outil}(${formaterArguments(a.arguments)})` })]));
+    if (r) {
+      bloc.append(el("div", {}, [el("span", { classe: "etiquette", texte: "Requête Hémicycle : " }), el("code", { texte: r.texte }),
+        el("span", { classe: "etiquette", texte: ` (envoyée par l'outil MCP ${r.mcp})` })]));
+      if (Object.keys(r.arguments || {}).length) {
+        bloc.append(el("details", {}, [
+          el("summary", { classe: "etiquette", texte: r.corps ? "Corps de la requête" : "Arguments envoyés" }),
+          el("pre", { texte: JSON.stringify(r.corps || r.arguments, null, 2) }),
+        ]));
+      }
+    }
+    bloc.append(el("div", { classe: "etiquette", texte: `Statut : ${a.statut} · ${a.credits} crédit(s)${a.duree_s != null ? " · " + virgule(a.duree_s) + " s" : ""} · ${a.lance_par === "serveur" ? "lancé par le serveur (recherche automatique)" : a.lance_par === "journaliste" ? "appel direct" : "demandé par le modèle"}` }));
+    if (a.message) bloc.append(el("div", { classe: "erreur", texte: a.message }));
+    return bloc;
+  }
+
+  // ---------- État du serveur ----------
+  async function rafraichirEtat() {
+    try {
+      const r = await fetch("/etat");
+      if (!r.ok) return;
+      const e = await r.json();
+      const solde = e.solde_hemicycle != null ? ` · solde Hémicycle : ${nombre(e.solde_hemicycle)} crédits` : "";
+      etat.textContent = `Modèle : ${e.modele}${solde} · consommés depuis le démarrage : ${e.credits_serveur} / ${e.plafond_credits_serveur}`;
+    } catch { /* serveur arrêté : on n'affiche rien */ }
+  }
+
+  // ---------- Catalogue et sélection des endpoints ----------
+  const endpointsDisponibles = () => (catalogue ? catalogue.endpoints.filter((e) => e.disponible) : []);
+  const parNom = (nom) => (catalogue ? catalogue.endpoints.find((e) => e.nom === nom) : null);
+
+  // Route REST de l'endpoint, avec {id} à la place de l'identifiant d'exemple.
+  function routeModele(e) {
+    const id = e.exemple && e.exemple.id;
+    return id ? e.requete_exemple.court.replace(id, "{id}") : e.requete_exemple.court;
+  }
+
+  function badgeCout(cout) {
+    return el("span", { classe: "cout" + (cout >= 5 ? " fort" : ""), texte: `${cout} cr.` });
+  }
+
+  function construirePanneau() {
+    const conteneur = $("categories");
+    conteneur.replaceChildren();
+    for (const categorie of catalogue.categories) {
+      const endpoints = catalogue.endpoints.filter((e) => e.categorie === categorie.id);
+      if (!endpoints.length) continue;
+      const groupe = el("fieldset", {}, [el("legend", { texte: categorie.titre }), el("p", { classe: "aide-categorie", texte: categorie.aide })]);
+      for (const e of endpoints) {
+        const id = `ep-${e.nom}`;
+        const caseACocher = el("input", { type: "checkbox", id, value: e.nom, disabled: !e.disponible });
+        caseACocher.checked = selection.has(e.nom);
+        caseACocher.addEventListener("change", () => {
+          if (caseACocher.checked) selection.add(e.nom); else selection.delete(e.nom);
+          selectionModifiee();
+        });
+        const description = el("div", { classe: "description", texte: e.description, hidden: true });
+        const plus = el("button", { type: "button", classe: "lien-discret", texte: "détails", "aria-expanded": "false" });
+        plus.addEventListener("click", () => {
+          description.hidden = !description.hidden;
+          plus.setAttribute("aria-expanded", String(!description.hidden));
+        });
+        const ligne = el("div", { classe: "endpoint" + (e.disponible ? "" : " indisponible") }, [
+          caseACocher,
+          el("label", { for: id, classe: "nom", texte: e.titre }),
+          el("span", {}, [badgeCout(e.cout), " ", plus]),
+          el("div", { classe: "route", title: `Appel réel : outil MCP ${e.outil_mcp}${e.jeu ? " (jeu " + e.jeu + ")" : ""}`, texte: e.disponible ? routeModele(e) : `indisponible : ${e.raison || "?"}` }),
+          description,
+        ]);
+        groupe.append(ligne);
+      }
+      conteneur.append(groupe);
+    }
+    const liste = $("non-proposes").querySelector("ul");
+    liste.replaceChildren(...catalogue.non_proposes.map((n) => el("li", {}, [el("code", { texte: n.nom }), ` (${n.cout} cr.) : ${n.raison}`])));
+
+    const preselections = $("preselections");
+    preselections.replaceChildren();
+    const tous = { id: "tout", titre: "Tout", outils: endpointsDisponibles().map((e) => e.nom) };
+    for (const p of [...catalogue.preselections, tous]) {
+      const bouton = el("button", { type: "button", texte: p.titre, "data-preselection": p.id });
+      bouton.addEventListener("click", () => {
+        selection = new Set(p.outils.filter((nom) => parNom(nom) && parNom(nom).disponible));
+        document.querySelectorAll("#categories input[type=checkbox]").forEach((c) => { c.checked = selection.has(c.value); });
+        selectionModifiee();
+      });
+      preselections.append(bouton);
+    }
+
+    const budget = $("budget");
+    const choixBudget = [5, 10, 20, 30, 50, 100].filter((n) => n <= catalogue.budget.plafond);
+    if (!choixBudget.includes(catalogue.budget.defaut)) choixBudget.push(catalogue.budget.defaut);
+    budget.replaceChildren(...choixBudget.sort((a, b) => a - b).map((n) => el("option", { value: n, texte: `${n} crédits` })));
+    budget.value = String(memoire.lire("veille.budget") || catalogue.budget.defaut);
+    if (!budget.value) budget.value = String(catalogue.budget.defaut);
+    const appels = $("max-appels");
+    appels.replaceChildren(...Array.from({ length: catalogue.appels.plafond }, (_, i) => el("option", { value: i + 1, texte: `${i + 1} au plus` })));
+    appels.value = String(memoire.lire("veille.appels") || catalogue.appels.defaut);
+    if (!appels.value) appels.value = String(catalogue.appels.defaut);
+    budget.addEventListener("change", () => { memoire.ecrire("veille.budget", Number(budget.value)); selectionModifiee(); });
+    appels.addEventListener("change", () => { memoire.ecrire("veille.appels", Number(appels.value)); selectionModifiee(); });
+    selectionModifiee();
+  }
+
+  function selectionModifiee() {
+    memoire.ecrire(CLE_SELECTION, [...selection]);
+    const choisis = [...selection].map(parNom).filter(Boolean);
+    const chers = choisis.filter((e) => e.cout >= 5).length;
+    $("resume-selection").textContent = `${choisis.length} endpoint${choisis.length > 1 ? "s" : ""} choisi${choisis.length > 1 ? "s" : ""}`
+      + (chers ? ` (dont ${chers} à 5 crédits)` : "") + ` · budget ${$("budget").value} crédits · ${$("max-appels").value} appels au plus`;
+    document.querySelectorAll("#preselections button").forEach((b) => {
+      const p = [...catalogue.preselections, { id: "tout", outils: endpointsDisponibles().map((e) => e.nom) }].find((x) => x.id === b.dataset.preselection);
+      const ensemble = new Set((p ? p.outils : []).filter((nom) => parNom(nom) && parNom(nom).disponible));
+      b.classList.toggle("actif", ensemble.size === selection.size && [...ensemble].every((n) => selection.has(n)));
+    });
+    envoyer.disabled = enCours || selection.size === 0;
+  }
+
+  async function chargerCatalogue() {
+    try {
+      const r = await fetch("/api/catalogue");
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      catalogue = await r.json();
+    } catch (erreur) {
+      $("resume-selection").textContent = "catalogue indisponible (serveur arrêté ?)";
+      return;
+    }
+    const memorisee = memoire.lire(CLE_SELECTION);
+    const valides = Array.isArray(memorisee) ? memorisee.filter((nom) => parNom(nom) && parNom(nom).disponible) : [];
+    // Par défaut : tous les endpoints disponibles sont cochés.
+    selection = new Set(valides.length ? valides : endpointsDisponibles().map((e) => e.nom));
+    construirePanneau();
+    construireDirect();
+  }
+
+  // ---------- Affichage d'une réponse ----------
+  function afficherLignes(donnees, idCarte) {
+    const bloc = el("div", { classe: "reponse" });
+    const appels = donnees.outils_utilises || [];
+    const lignes = (donnees.lignes && donnees.lignes.length)
+      ? donnees.lignes
+      : String(donnees.reponse || "").split(/\r?\n/).filter((l) => l.trim()).map((texte) => ({ texte, appels: [] }));
+    for (const ligne of lignes) {
+      const puce = ligne.texte.match(/^([-*•]|\d+[.)])\s+(.*)$/);
+      const texte = el("p", { classe: "ligne-texte" + (puce ? " puce" : "") }, enrichir(puce ? puce[2] : ligne.texte));
+      const colonne = el("div", { classe: "ligne-appels" });
+      const rangee = el("div", { classe: "ligne" }, [texte, colonne]);
+      for (const indice of ligne.appels || []) {
+        const a = appels[indice];
+        if (!a) continue;
+        const bouton = el("button", { type: "button", classe: "appel-api", title: infobulleAppel(a), "aria-expanded": "false" }, etiquetteRequete(a.requete, a.outil));
+        let detail = null;
+        bouton.addEventListener("click", () => {
+          if (detail) { detail.remove(); detail = null; bouton.setAttribute("aria-expanded", "false"); return; }
+          detail = detailAppel(a);
+          rangee.append(detail);
+          bouton.setAttribute("aria-expanded", "true");
+          const cible = document.getElementById(`${idCarte}-appel-${indice}`);
+          if (cible) { cible.classList.add("eclaire"); setTimeout(() => cible.classList.remove("eclaire"), 1600); }
+        });
+        colonne.append(bouton);
+      }
+      bloc.append(rangee);
+    }
+    return bloc;
   }
 
   function afficherSources(sources) {
@@ -214,8 +540,7 @@
       const url = lienSur(s.url);
       const titre = url ? el("a", { href: url, target: "_blank", rel: "noopener noreferrer", texte: libelle }) : el("span", { texte: libelle });
       const badges = [];
-      if (s.verifie_par_la_redaction === false) badges.push(el("span", { classe: "badge", texte: "non vérifié par la rédaction" }));
-      if (s.citee === false) badges.push(el("span", { classe: "badge neutre", texte: "consultée, non citée" }));
+      if (s.citee === false) badges.push(el("span", { classe: "badge", texte: "consultée, non citée" }));
       const detail = [s.titre, [s.editeur, s.licence].filter(Boolean).join(" · ")].filter(Boolean).join(" — ");
       liste.append(el("li", {}, [titre, ...badges, detail ? el("div", { classe: "detail", texte: detail }) : null]));
     }
@@ -223,9 +548,18 @@
   }
 
   function texteACopier(donnees) {
-    let texte = donnees.reponse.trim();
+    const appels = donnees.outils_utilises || [];
+    let texte;
+    if (donnees.lignes && donnees.lignes.length) {
+      texte = donnees.lignes.map((l) => {
+        const routes = (l.appels || []).map((i) => appels[i] && appels[i].requete ? appels[i].requete.texte : null).filter(Boolean);
+        return l.texte + (routes.length ? `  [${routes.join(" ; ")}]` : "");
+      }).join("\n");
+    } else {
+      texte = String(donnees.reponse || "").trim();
+    }
     if (donnees.sources && donnees.sources.length) {
-      texte += "\n\nSources (Hémicycle, non vérifiées par la rédaction) :";
+      texte += "\n\nSources (via Hémicycle) :";
       for (const s of donnees.sources) texte += `\n- ${s.libelle || s.editeur || "Source"}${s.url ? " — " + s.url : ""}`;
     }
     return texte;
@@ -243,53 +577,19 @@
     setTimeout(() => { bouton.textContent = avant; }, 1500);
   }
 
-  function carteReponse(question, donnees) {
-    const carte = el("article", { classe: "carte" });
-    carte.append(el("p", { classe: "question", texte: question }));
-    carte.append(afficherTexte(donnees.reponse || ""));
-    for (const a of donnees.avertissements || []) carte.append(el("p", { classe: "avertissement", texte: a }));
-    if (donnees.sources && donnees.sources.length) {
-      carte.append(el("h2", { texte: "Sources" }));
-      carte.append(afficherSources(donnees.sources));
-    }
-    const meta = donnees.meta || {};
-    const credits = Number(donnees.credits || 0);
-    const pied = el("div", { classe: "pied" }, [
-      el("span", { texte: `Coût : ${credits} crédit${credits > 1 ? "s" : ""} Hémicycle` }),
-      meta.duree_s != null ? el("span", { texte: `${String(meta.duree_s).replace(".", ",")} s` }) : null,
-    ]);
-    const boutonCopier = el("button", { type: "button", texte: "Copier" });
-    boutonCopier.addEventListener("click", () => copier(texteACopier(donnees), boutonCopier));
-    pied.append(boutonCopier);
-    carte.append(pied);
-    const appels = afficherAppels(donnees);
-    if (appels) carte.append(appels);
-    return carte;
-  }
-
-  // ---- Appels API : ce qu'a fait le modèle Featherless, et les appels Hémicycle qui en découlent ----
-  const virgule = (n) => String(n).replace(".", ",");
-
-  function formaterArguments(args) {
-    return Object.entries(args || {}).map(([cle, valeur]) => `${cle}: ${JSON.stringify(valeur)}`).join(", ");
-  }
-
-  function ligneOutil(o) {
-    const parServeur = o.lance_par === "serveur";
-    return el("li", { classe: "outil" + (o.statut === "erreur" ? " erreur" : "") }, [
-      el("span", { classe: "type", texte: "Hémicycle" }),
-      el("code", { texte: `${o.outil}(${formaterArguments(o.arguments)})` }),
-      el("span", { classe: "discret", texte: `${o.statut} · ${o.credits} cr.${o.duree_s != null ? " · " + virgule(o.duree_s) + " s" : ""}` }),
-      el("span", { classe: "badge neutre", texte: parServeur ? "lancé par le serveur (recherche automatique)" : "demandé par le modèle" }),
-    ]);
-  }
-
-  function afficherAppels(donnees) {
+  function afficherAppels(donnees, idCarte) {
     const meta = donnees.meta || {};
     const etapes = meta.etapes_llm || [];
     const outils = donnees.outils_utilises || [];
     if (!etapes.length && !outils.length) return null;
     const liste = el("ol", { classe: "appels" });
+    const ligneOutil = (o) => el("li", { classe: "outil" + (o.statut === "erreur" ? " erreur" : ""), id: `${idCarte}-appel-${outils.indexOf(o)}` }, [
+      el("span", { classe: "type", texte: "Hémicycle" }),
+      el("code", { texte: `${o.outil}(${formaterArguments(o.arguments)})` }),
+      o.requete ? el("span", { classe: "appel-api", title: infobulleAppel(o) }, etiquetteRequete(o.requete, o.outil)) : null,
+      el("span", { classe: "discret", texte: `${o.statut} · ${o.credits} cr.${o.duree_s != null ? " · " + virgule(o.duree_s) + " s" : ""}` }),
+      el("span", { classe: "badge", texte: o.lance_par === "serveur" ? "lancé par le serveur (recherche automatique)" : "demandé par le modèle" }),
+    ]);
     for (const e of etapes) {
       const ici = outils.filter((o) => o.etape === e.etape);
       const demandes = e.outils_demandes || [];
@@ -310,6 +610,32 @@
     return el("section", {}, [el("h2", { texte: titre }), liste]);
   }
 
+  function carteReponse(question, donnees) {
+    const idCarte = `carte-${++compteurCartes}`;
+    const carte = el("article", { classe: "carte", id: idCarte });
+    carte.append(el("p", { classe: "question", texte: question }));
+    carte.append(afficherLignes(donnees, idCarte));
+    for (const a of donnees.avertissements || []) carte.append(el("p", { classe: "avertissement", texte: a }));
+    if (donnees.sources && donnees.sources.length) {
+      carte.append(el("h2", { texte: "Sources" }));
+      carte.append(afficherSources(donnees.sources));
+    }
+    const meta = donnees.meta || {};
+    const credits = Number(donnees.credits || 0);
+    const pied = el("div", { classe: "pied" }, [
+      el("span", { texte: `Coût : ${credits} crédit${credits > 1 ? "s" : ""} Hémicycle` }),
+      meta.duree_s != null ? el("span", { texte: `${virgule(meta.duree_s)} s` }) : null,
+      meta.outils_choisis ? el("span", { texte: `${meta.outils_choisis.length} endpoint(s) autorisé(s), budget ${meta.budget_credits} cr.` }) : null,
+    ]);
+    const boutonCopier = el("button", { type: "button", texte: "Copier" });
+    boutonCopier.addEventListener("click", () => copier(texteACopier(donnees), boutonCopier));
+    pied.append(boutonCopier);
+    carte.append(pied);
+    const appels = afficherAppels(donnees, idCarte);
+    if (appels) carte.append(appels);
+    return carte;
+  }
+
   function carteErreur(question, message) {
     return el("article", { classe: "carte" }, [
       el("p", { classe: "question", texte: question }),
@@ -317,51 +643,106 @@
     ]);
   }
 
-  async function rafraichirEtat() {
-    try {
-      const r = await fetch("/etat");
-      if (!r.ok) return;
-      const e = await r.json();
-      etat.textContent = `Modèle : ${e.modele} · crédits consommés depuis le démarrage : ${e.credits_serveur} / ${e.plafond_credits_serveur}`;
-    } catch { /* serveur arrêté : on n'affiche rien */ }
+  // ---------- Progression (POST /chat/flux, NDJSON) ----------
+  function ajouterEtape(evenement) {
+    const t = evenement.t != null ? `${virgule(Number(evenement.t).toFixed(1))} s` : "";
+    const items = [el("span", { classe: "t", texte: t }), el("span", { texte: evenement.message || evenement.code })];
+    if (evenement.requete) items.push(el("span", { classe: "appel-api" }, etiquetteRequete(evenement.requete, evenement.outil)));
+    const li = el("li", { "data-outil": evenement.outil || "" }, items);
+    listeEtapes.append(li);
+    attenteTexte.textContent = evenement.message || "Recherche en cours…";
   }
 
-  async function poser(question) {
+  function marquerAppel(evenement) {
+    const a = evenement.appel || {};
+    const candidates = [...listeEtapes.querySelectorAll("li")].filter((li) => li.dataset.outil === a.outil && !li.dataset.fini);
+    const li = candidates[0];
+    const statut = `${a.statut === "erreur" ? "✗" : "✓"} ${a.credits || 0} cr.${a.duree_s != null ? " · " + virgule(a.duree_s) + " s" : ""}`;
+    if (li) { li.dataset.fini = "1"; li.append(el("span", { classe: a.statut === "erreur" ? "erreur" : "fait", texte: statut })); }
+  }
+
+  class ErreurServeur extends Error {}
+
+  async function demander(corps, signal) {
+    const options = { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corps), signal };
+    let reponse = await fetch("/chat/flux", options);
+    if (reponse.status === 404 || reponse.status === 405) {
+      // Serveur sans route de progression : réponse d'un bloc.
+      ajouterEtape({ message: "Recherche en cours (progression indisponible sur ce serveur)…" });
+      reponse = await fetch("/chat", options);
+      const donnees = await reponse.json().catch(() => ({}));
+      if (!reponse.ok) throw new ErreurServeur(typeof donnees.detail === "string" ? donnees.detail : `Erreur ${reponse.status}.`);
+      return donnees;
+    }
+    if (!reponse.ok || !reponse.body) {
+      const donnees = await reponse.json().catch(() => ({}));
+      throw new ErreurServeur(typeof donnees.detail === "string" ? donnees.detail : `Erreur ${reponse.status}.`);
+    }
+    const lecteur = reponse.body.getReader();
+    const decodeur = new TextDecoder();
+    let tampon = "", resultat = null;
+    const traiter = (ligne) => {
+      if (!ligne.trim()) return;
+      let evenement;
+      try { evenement = JSON.parse(ligne); } catch { return; }
+      if (evenement.type === "reponse") resultat = evenement.donnees;
+      else if (evenement.type === "erreur") throw new ErreurServeur(evenement.detail || `Erreur ${evenement.statut}.`);
+      else if (evenement.type === "etape") ajouterEtape(evenement);
+      else if (evenement.type === "appel") marquerAppel(evenement);
+    };
+    for (;;) {
+      const { value, done } = await lecteur.read();
+      if (done) break;
+      tampon += decodeur.decode(value, { stream: true });
+      let fin;
+      while ((fin = tampon.indexOf("\n")) >= 0) {
+        const ligne = tampon.slice(0, fin);
+        tampon = tampon.slice(fin + 1);
+        traiter(ligne);
+      }
+    }
+    traiter(tampon + decodeur.decode());
+    if (!resultat) throw new ErreurServeur("Réponse interrompue avant la fin.");
+    return resultat;
+  }
+
+  function boutonsActifs(actifs) {
+    envoyer.disabled = !actifs || selection.size === 0;
+    document.querySelectorAll(".rapides button").forEach((b) => { b.disabled = !actifs; });
+  }
+
+  async function poser(question, outilsEnPlus = []) {
     question = question.trim();
     if (!question || enCours) return;
+    if (!selection.size && !outilsEnPlus.length) { fil.append(carteErreur(question, "Choisissez au moins un endpoint dans « Endpoints de la veille ».")); return; }
     enCours = true;
-    envoyer.disabled = true;
-    document.querySelectorAll(".rapides button").forEach((b) => { b.disabled = true; });
+    boutonsActifs(false);
+    listeEtapes.replaceChildren();
     const debut = Date.now();
-    attenteTexte.textContent = "Recherche en cours…";
+    attenteTexte.textContent = "Envoi de la question…";
     attente.classList.add("visible");
+    annulation = new AbortController();
+    const outils = [...new Set([...selection, ...outilsEnPlus.filter((nom) => parNom(nom) && parNom(nom).disponible)])];
+    const corps = { question, historique, outils, budget_credits: Number($("budget").value) || undefined, max_appels: Number($("max-appels").value) || undefined };
     const minuteur = setInterval(() => {
-      attenteTexte.textContent = `Recherche en cours… ${Math.round((Date.now() - debut) / 1000)} s`;
+      if (!listeEtapes.children.length) attenteTexte.textContent = `Recherche en cours… ${Math.round((Date.now() - debut) / 1000)} s`;
     }, 1000);
     try {
-      const reponse = await fetch("/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question, historique }),
-      });
-      const donnees = await reponse.json().catch(() => ({}));
-      if (!reponse.ok) {
-        const detail = typeof donnees.detail === "string" ? donnees.detail : `Erreur ${reponse.status}.`;
-        fil.append(carteErreur(question, detail));
-      } else {
-        fil.append(carteReponse(question, donnees));
-        historique.push({ role: "user", contenu: question }, { role: "assistant", contenu: donnees.reponse || "" });
-        historique = historique.slice(-6);
-        champ.value = "";
-      }
+      const donnees = await demander(corps, annulation.signal);
+      fil.append(carteReponse(question, donnees));
+      historique.push({ role: "user", contenu: question }, { role: "assistant", contenu: donnees.reponse || "" });
+      historique = historique.slice(-6);
+      champ.value = "";
     } catch (erreur) {
-      fil.append(carteErreur(question, "Le serveur ne répond pas. Est-il lancé ?"));
+      const message = erreur.name === "AbortError" ? "Question annulée."
+        : erreur instanceof ErreurServeur ? erreur.message : "Le serveur ne répond pas. Est-il lancé ?";
+      fil.append(carteErreur(question, message));
     } finally {
       clearInterval(minuteur);
       attente.classList.remove("visible");
       enCours = false;
-      envoyer.disabled = false;
-      document.querySelectorAll(".rapides button").forEach((b) => { b.disabled = false; });
+      annulation = null;
+      boutonsActifs(true);
       rafraichirEtat();
     }
   }
@@ -371,14 +752,198 @@
     if (evenement.key === "Enter" && (evenement.ctrlKey || evenement.metaKey)) { evenement.preventDefault(); poser(champ.value); }
   });
   document.querySelectorAll(".rapides button").forEach((bouton) => {
-    bouton.addEventListener("click", () => poser(bouton.dataset.question));
+    bouton.addEventListener("click", () => poser(bouton.dataset.question, (bouton.dataset.outils || "").split(",").filter(Boolean)));
   });
-  document.getElementById("nouvelle").addEventListener("click", () => {
+  $("annuler").addEventListener("click", () => { if (annulation) annulation.abort(); });
+  $("nouvelle").addEventListener("click", () => {
     historique = [];
     fil.replaceChildren();
     champ.focus();
   });
+
+  // ---------- Onglets ----------
+  const onglets = [$("onglet-question"), $("onglet-direct")];
+  function activer(onglet) {
+    for (const o of onglets) {
+      const actif = o === onglet;
+      o.setAttribute("aria-selected", String(actif));
+      o.tabIndex = actif ? 0 : -1;
+      $(o.getAttribute("aria-controls")).hidden = !actif;
+    }
+  }
+  onglets.forEach((o, i) => {
+    o.addEventListener("click", () => activer(o));
+    o.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+        const suivant = onglets[(i + (e.key === "ArrowRight" ? 1 : onglets.length - 1)) % onglets.length];
+        activer(suivant); suivant.focus();
+      }
+    });
+  });
+
+  // ---------- Appel direct d'un endpoint ----------
+  const directSelect = $("direct-endpoint"), directChamps = $("direct-champs"), directResultat = $("direct-resultat");
+
+  function construireDirect() {
+    directSelect.replaceChildren();
+    for (const categorie of catalogue.categories) {
+      const endpoints = endpointsDisponibles().filter((e) => e.categorie === categorie.id);
+      if (!endpoints.length) continue;
+      directSelect.append(el("optgroup", { label: categorie.titre }, endpoints.map((e) => el("option", { value: e.nom, texte: `${e.titre} (${e.cout} cr.)` }))));
+    }
+    const memorise = memoire.lire("veille.direct");
+    if (memorise && parNom(memorise)) directSelect.value = memorise;
+    afficherFormulaireDirect(true);
+  }
+
+  function valeurInitiale(schema, valeur) {
+    if (valeur === undefined || valeur === null) return "";
+    if (schema.type === "array" && (!schema.items || schema.items.type !== "object") && Array.isArray(valeur)) return valeur.join(", ");
+    if (typeof valeur === "object") return JSON.stringify(valeur, null, 2);
+    return String(valeur);
+  }
+
+  function afficherFormulaireDirect(avecExemple) {
+    const e = parNom(directSelect.value);
+    if (!e) return;
+    memoire.ecrire("veille.direct", e.nom);
+    $("direct-description").textContent = e.description;
+    $("direct-route").textContent = `${routeModele(e)} · outil MCP ${e.outil_mcp}${e.jeu ? " (jeu " + e.jeu + ")" : ""} · ${e.cout} crédit(s) par appel`;
+    $("direct-envoyer").textContent = `Appeler (≈ ${e.cout} crédit${e.cout > 1 ? "s" : ""})`;
+    const proprietes = (e.parametres && e.parametres.properties) || {};
+    const requis = new Set((e.parametres && e.parametres.required) || []);
+    directChamps.replaceChildren();
+    for (const [nom, schema] of Object.entries(proprietes)) {
+      const initiale = avecExemple ? valeurInitiale(schema, e.exemple[nom]) : "";
+      let entree;
+      if (Array.isArray(schema.enum)) {
+        entree = el("select", {}, [el("option", { value: "", texte: "— non précisé —" }), ...schema.enum.map((v) => el("option", { value: v, texte: v }))]);
+        entree.value = initiale;
+      } else if (schema.type === "boolean") {
+        entree = el("select", {}, [el("option", { value: "", texte: "— non précisé —" }), el("option", { value: "true", texte: "oui" }), el("option", { value: "false", texte: "non" })]);
+        entree.value = initiale;
+      } else if (schema.type === "integer" || schema.type === "number") {
+        entree = el("input", { type: "number", min: schema.minimum, max: schema.maximum, step: schema.type === "integer" ? 1 : "any" });
+        entree.value = initiale;
+      } else if (schema.type === "object" || (schema.type === "array" && schema.items && schema.items.type === "object")) {
+        entree = el("textarea", { rows: 3, placeholder: "JSON" });
+        entree.value = initiale;
+      } else {
+        entree = el("input", { type: "text", placeholder: schema.type === "array" ? "valeurs séparées par des virgules" : (schema.pattern ? `format : ${schema.pattern}` : "") });
+        entree.value = initiale;
+      }
+      entree.dataset.nom = nom;
+      entree.dataset.type = schema.type === "array" && schema.items && schema.items.type === "object" ? "json" : (schema.type || "string");
+      if (schema.type === "array" && schema.items && schema.items.type === "integer") entree.dataset.items = "integer";
+      directChamps.append(el("label", { classe: "champ" }, [
+        el("span", {}, [el("code", { texte: nom }), requis.has(nom) ? " (obligatoire)" : ""]),
+        entree,
+        schema.description ? el("span", { classe: "aide-champ", texte: schema.description }) : null,
+      ]));
+    }
+    if (!Object.keys(proprietes).length) directChamps.append(el("p", { classe: "aide-champ", texte: "Aucun paramètre." }));
+  }
+
+  function lireArguments() {
+    const args = {};
+    for (const entree of directChamps.querySelectorAll("[data-nom]")) {
+      const brut = entree.value.trim();
+      if (brut === "") continue;
+      const type = entree.dataset.type;
+      if (type === "integer" || type === "number") args[entree.dataset.nom] = Number(brut);
+      else if (type === "boolean") args[entree.dataset.nom] = brut === "true";
+      else if (type === "array") args[entree.dataset.nom] = brut.split(",").map((v) => v.trim()).filter(Boolean).map((v) => entree.dataset.items === "integer" ? Number(v) : v);
+      else if (type === "json" || type === "object") {
+        try { args[entree.dataset.nom] = JSON.parse(brut); }
+        catch { throw new Error(`« ${entree.dataset.nom} » : JSON invalide.`); }
+      } else args[entree.dataset.nom] = brut;
+    }
+    return args;
+  }
+
+  function premiereListe(valeur) {
+    if (Array.isArray(valeur) && valeur.length && valeur.every((v) => v && typeof v === "object" && !Array.isArray(v))) return valeur;
+    if (valeur && typeof valeur === "object" && !Array.isArray(valeur)) {
+      for (const cle of ["resultats", "scrutins", "reunions", "lignes", "data", "resultats_recherche", "groupes", "deputes", "paires", "auteurs"]) {
+        const liste = premiereListe(valeur[cle]);
+        if (liste) return liste;
+      }
+      for (const v of Object.values(valeur)) {
+        const liste = Array.isArray(v) ? premiereListe(v) : null;
+        if (liste) return liste;
+      }
+    }
+    return null;
+  }
+
+  function tableau(lignes) {
+    const colonnes = [];
+    for (const l of lignes.slice(0, 50)) for (const c of Object.keys(l)) if (!colonnes.includes(c)) colonnes.push(c);
+    const cellule = (v) => v === null || v === undefined ? "" : typeof v === "object" ? JSON.stringify(v) : String(v);
+    return el("div", { classe: "tableau" }, el("table", {}, [
+      el("thead", {}, el("tr", {}, colonnes.map((c) => el("th", { texte: c })))),
+      el("tbody", {}, lignes.slice(0, 50).map((l) => el("tr", {}, colonnes.map((c) => el("td", { texte: cellule(l[c]).slice(0, 400) }))))),
+    ]));
+  }
+
+  function jsonJoli(valeur, max = 120000) {
+    const texte = typeof valeur === "string" ? valeur : JSON.stringify(valeur, null, 2);
+    return el("pre", { classe: "json", texte: texte.length > max ? texte.slice(0, max) + `\n… (${nombre(texte.length - max)} caractères de plus)` : texte });
+  }
+
+  $("direct-formulaire").addEventListener("submit", async (evenement) => {
+    evenement.preventDefault();
+    const e = parNom(directSelect.value);
+    if (!e) return;
+    let args;
+    try { args = lireArguments(); }
+    catch (erreur) { directResultat.replaceChildren(el("div", { classe: "carte erreur", texte: erreur.message })); return; }
+    const bouton = $("direct-envoyer");
+    bouton.disabled = true;
+    directResultat.replaceChildren(el("div", { classe: "carte" }, [el("div", { classe: "attente-tete" }, [el("span", { classe: "rond", "aria-hidden": "true" }), `Appel de ${e.titre}…`])]));
+    try {
+      const reponse = await fetch("/api/appel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ outil: e.nom, arguments: args }) });
+      const d = await reponse.json().catch(() => ({}));
+      if (!reponse.ok) throw new ErreurServeur(typeof d.detail === "string" ? d.detail : `Erreur ${reponse.status}.`);
+      const blocs = [];
+      blocs.push(el("div", { classe: "carte" }, [
+        el("p", { classe: "question", texte: `${e.titre} — ${d.statut === "erreur" ? "erreur" : d.statut === "cache" ? "servi depuis le cache" : "OK"}` }),
+        el("div", { classe: "pied", style: "margin-top:0;border-top:none;padding-top:0" }, [
+          el("span", { texte: `${d.credits} crédit(s)` }),
+          d.duree_s != null ? el("span", { texte: `${virgule(d.duree_s)} s` }) : null,
+          d.solde_hemicycle != null ? el("span", { texte: `solde : ${nombre(d.solde_hemicycle)} crédits` }) : null,
+          d.tronque ? el("span", { texte: "résultat tronqué pour le modèle" }) : null,
+        ]),
+        d.message ? el("p", { classe: "erreur", texte: d.message }) : null,
+        el("h2", { texte: "Requête envoyée" }),
+        detailAppel(d),
+      ]));
+      if (d.statut !== "erreur") {
+        const liste = premiereListe(d.resultat) || premiereListe(d.brut);
+        const resultat = el("div", { classe: "carte" }, [el("h2", { style: "margin-top:0", texte: liste ? `Résultat (${liste.length} ligne${liste.length > 1 ? "s" : ""})` : "Résultat (tel que le modèle le voit)" })]);
+        resultat.append(liste ? tableau(liste) : jsonJoli(d.resultat));
+        if (d.sources && d.sources.length) resultat.append(el("h2", { texte: "Sources" }), afficherSources(d.sources));
+        blocs.push(resultat);
+        if (d.brut !== null && d.brut !== undefined) {
+          blocs.push(el("details", { classe: "carte" }, [
+            el("summary", { texte: `Réponse brute d'Hémicycle (${nombre(d.taille_brute)} caractères${d.brut_tronque ? ", tronquée" : ""})` }),
+            jsonJoli(d.brut),
+          ]));
+        }
+      }
+      directResultat.replaceChildren(...blocs);
+    } catch (erreur) {
+      directResultat.replaceChildren(el("div", { classe: "carte erreur", texte: erreur instanceof ErreurServeur ? erreur.message : "Le serveur ne répond pas. Est-il lancé ?" }));
+    } finally {
+      bouton.disabled = false;
+      rafraichirEtat();
+    }
+  });
+  directSelect.addEventListener("change", () => afficherFormulaireDirect(true));
+  $("direct-exemple").addEventListener("click", () => afficherFormulaireDirect(true));
+
   rafraichirEtat();
+  chargerCatalogue();
 })();
 </script>
 </body>

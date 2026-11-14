@@ -64,15 +64,23 @@ Contexte : [`backend/README.md`](README.md) · [`docs/ARCHITECTURE.md`](../docs/
 - [ ] **Serveur** exposant `POST /chat`, conforme au contrat de [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md).
   - [x] Premier serveur FastAPI : l'outil de rédaction ([`chatbot/serveur.py`](chatbot/serveur.py)), `POST /chat` testé avec curl le 14/11/2026 (voir section 7). Reste : le rapport comme source, le streaming, le champ `mois`.
 - [x] **Client LLM** : SDK OpenAI pointé sur `https://api.featherless.ai/v1`, clé `FEATHERLESS_API_KEY` → [`chatbot/featherless_client.py`](chatbot/featherless_client.py), connexion vérifiée avec `chatbot/smoke_test.py`.
-- [ ] **Prompt système** rédigé à partir des règles éditoriales du chatbot ([`docs/EDITORIAL.md`](../docs/EDITORIAL.md)).
-  - [x] Prompt de l'outil de rédaction (journalistes) : Hémicycle uniquement, réponses brèves, datées et sourcées (`serveur.prompt_systeme`). Reste le prompt pour les lecteurs, avec le rapport.
+- [x] **Prompt système** rédigé à partir des règles éditoriales du chatbot ([`docs/EDITORIAL.md`](../docs/EDITORIAL.md)).
+  - [x] Prompt de l'outil de rédaction (journalistes) : Hémicycle uniquement, réponses brèves, datées et sourcées (`serveur.prompt_systeme`).
+  - [x] Prompt lecteur (`serveur.prompt_lecteur`) : prompt complet, plus ajouté à la suite de celui des journalistes ; 4 cas (rapport → surlignage, rapport + détail Hémicycle, Hémicycle seul, hors sujet → refus fixe `MESSAGE_HORS_PERIMETRE`, sans recherche automatique). Pas de limite de longueur. Testé sur `demo` le 14/11/2026 : les 4 cas répondent comme prévu (0 à 3 crédits, 8 à 43 s).
 - [ ] **Réponse en streaming** vers le site.
   - [x] Streaming depuis Featherless vérifié (`smoke_test.py`) ; reste à le relayer au site.
 - [ ] **Robustesse** :
   - [ ] gérer les `429` de Featherless (concurrence dépassée), avec un message clair au lecteur. Nouvelles tentatives espacées (`Retry-After` respecté) déjà dans `featherless_client.py`, testées sur des réponses simulées seulement (aucun vrai `429` rencontré) ; message au lecteur à faire ;
-  - [ ] limiter le nombre de requêtes par visiteur et la longueur des questions (longueur : 1 000 caractères au plus dans `serveur.py` ; nombre de requêtes par visiteur : à faire) ;
-  - [ ] configurer CORS pour le domaine du site.
-- [ ] **Choisir l'hébergement** du chatbot.
+  - [ ] ~~limiter le nombre de requêtes par visiteur~~ hors périmètre (démo) et la longueur des questions (longueur : 1 000 caractères au plus dans `serveur.py` ; nombre de requêtes par visiteur : à faire) ;
+  - [x] CORS ouvert à toutes les origines (`allow_origins=["*"]`, démo) dans `serveur.py`, vérifié le 14/11/2026 (préflight `/chat` et `GET /api/rapports`).
+- [x] **Choisir l'hébergement** du chatbot : **Vercel, plan gratuit (Hobby)**, un seul projet pour le site et l'API (même domaine, pas de CORS). Mise en ligne **à la fin**, après la fusion des branches.
+- [ ] **Déployer sur Vercel** (à la fin) :
+  - [ ] `app.py` à la racine : ajoute `backend/chatbot` au `sys.path` et réexporte `app` de `serveur.py` (Vercel cherche `app.py`, `main.py` ou `index.py` à la racine ou dans `api/`) ;
+  - [ ] `requirements.txt` à la racine : `-r backend/chatbot/requirements.txt` ;
+  - [ ] **ne pas** mettre le Root Directory sur `backend/chatbot` : le serveur lit `rapports/` et `frontend/` depuis la racine ;
+  - [ ] recopier les variables du `.env` dans le tableau de bord Vercel ; laisser `CHATBOT_TRACE` vide (disque en lecture seule, sauf `/tmp`) ;
+  - [ ] après déploiement : `GET /api/rapports` liste bien les numéros, et une question du mode lecteur fonctionne.
+  - Limites acceptées pour la démo : 300 s au plus par requête ; compteur de crédits et sémaphore Featherless propres à chaque instance (remis à zéro à chaque démarrage à froid) ; session MCP sans reconnexion (voir section 7).
 
 ## 5. Brancher le rapport et le MCP Hémicycle au chatbot
 
@@ -95,11 +103,11 @@ Contexte : [`backend/README.md`](README.md) · [`docs/ARCHITECTURE.md`](../docs/
 - [x] **Mettre dans le prompt système** les formats d'identifiants (`VTANR5L17V…` scrutins, `PA…` députés, `PIONANR5L17B…` textes) et la consigne de limiter `positions_groupes` à une dizaine de scrutins par appel (prompt de l'outil de rédaction).
 - [ ] **Décider de la liste blanche** (recommandations du test) :
   - retirer `guide` (définition la plus lourde, inutile pour les lecteurs) ;
-  - `lire_acteur` exige un identifiant `PA…` qu'aucun outil autorisé ne fournit → garder les `PA` dans le compacteur de `resultat_scrutin`, ou autoriser `interroger` limité aux jeux `deputes` / `deputes_en_exercice` ;
+  - `lire_acteur` exige un identifiant `PA…` → résolu par `chercher_depute` (`veille.py`, jeu `deputes_en_exercice` : nom → `PA…` et groupe) ;
   - garder `interroger` exclu sinon (jusqu'à 50 crédits par prédiction Orcet renvoyée).
-- [ ] Les URL de source renvoyées par `rechercher` pointent vers des fichiers JSON open data : construire des liens lisibles pour les lecteurs.
+- [x] Les URL de source renvoyées par `rechercher` pointent vers des fichiers JSON open data : construire des liens lisibles pour les lecteurs.
   - [x] Scrutins (`https://www.assemblee-nationale.fr/dyn/17/scrutins/<numéro>`) et projets ou propositions de loi (`…/dyn/17/textes/l17b<numéro sur 4 chiffres>_projet-loi` ou `_proposition-loi`) : formats vérifiés le 14/11/2026 (`serveur.enrichir_source`).
-  - [ ] Rapports (`RAPP…`), textes adoptés (`…BTA…`, `…TAP…`), textes du Sénat (`…SN…`), dossiers (`DLR…`) et agenda : aucun format de page lisible vérifié, le lien reste le fichier open data.
+  - [x] Rapports (`RAPP…`), textes adoptés (`…BTA…`, `…TAP…`), textes du Sénat (`…SN…`), dossiers (`DLR…`) et agenda : **décision (démo) : le lien reste le fichier JSON open data** fourni par Hémicycle, avec un libellé lisible (`enrichir_source`).
 - [ ] **Clé dédiée au chatbot** (`hmc_live_`) avec un plafond de crédits par jour. Pour l'instant, la même clé est utilisée pour le pipeline et le chatbot.
 
 ## 6. Modèle : Qwen3.8-27B
@@ -126,17 +134,20 @@ Serveur [`chatbot/serveur.py`](chatbot/serveur.py) et page [`frontend/outil-reda
 - [ ] **Appels d'outils écrits en texte** : avec `enable_thinking: false`, `Qwen/Qwen3.8-27B` n'émet pas de `tool_calls` natifs mais du XML dans le texte (`<tool_call><function=…><parameter=…>`), parfois malformé (`<function=tool>` avec le vrai nom dans `<parameter=action>`, `jusqu` ou `jusquau` pour `jusqu_a`, `recherche` pour `q`). Le serveur les récupère (`appels_outils_en_texte`) et corrige les noms de paramètres. Avec la réflexion activée, les `tool_calls` étaient natifs et corrects (1 essai). À signaler au support Featherless.
 - [ ] **Oubli des outils** : sans réflexion, le modèle a répondu sans appeler d'outil au premier tour dans 3 essais sur 7 (une fois avec la première version du prompt, une fois sur la question piège, une fois sur la question d'actualité rejouée) et a inventé une fois un outil `computer_use` (refusé). Chaque relance coûte une requête de plus.
 - [ ] **Réflexion activée ou non** : sur la même question, désactivée 17,4 s et 137 mots, activée 23,8 s et 144 mots, contenu équivalent. Défaut actuel : désactivée (`CHATBOT_REFLEXION=0`). À trancher sur un échantillon plus large (le jeu d'évaluation de la section 6).
-- [ ] **Brièveté** : la cible de 80 mots n'est pas tenue (58 à 144 mots, 4 à 5 puces). Le serveur coupe au-delà de 5 puces. Pistes : consigne chiffrée plus stricte, exemple de réponse dans le prompt, ou deuxième passage de condensation.
+- [ ] **Brièveté** (outil de rédaction seulement ; le mode lecteur n'a pas de limite) : la cible de 80 mots n'est pas tenue (58 à 144 mots, 4 à 5 puces). Le serveur coupe au-delà de 5 puces. Pistes : consigne chiffrée plus stricte, exemple de réponse dans le prompt, ou deuxième passage de condensation.
 - [ ] « Où en est le texte sur X ? » : le modèle a d'abord limité `derniers_scrutins` à la semaine, appelé `lire_texte` avec un identifiant de dossier (404, non facturé) et omis l'étape la plus récente (texte du Sénat du 01/07/2026). Prompt corrigé depuis, non retesté.
 - [ ] Fraîcheur : l'index des scrutins d'Hémicycle est mis à jour chaque matin (dernière ingestion observée : 14/11/2026 à 05:18 UTC) ; les votes du jour n'apparaissent que le lendemain. À dire aux journalistes.
 - [ ] Plafond de crédits : compteur en mémoire depuis le démarrage (`CHATBOT_MAX_CREDITS_SERVEUR`) ; prévoir un plafond par jour qui survive à un redémarrage, et une clé dédiée.
 - [ ] Reconnexion au MCP si la session tombe (aujourd'hui : erreur renvoyée au modèle, puis réponse « introuvable »).
-- [ ] `lire_acteur` n'est pas exposé (aucun outil ne fournit d'identifiant `PA…`) : les questions sur un député précis restent sans réponse.
+- [ ] **Questions sur un député (« mon député »)** :
+  - [x] Outil de rédaction : `chercher_depute` (nom → `PA…`) puis `lire_acteur` (fiche et mandats), dans la présélection « Assemblée complète » de `veille.py`.
+  - [ ] Chatbot du rapport : ajouter `chercher_depute` et `lire_acteur` aux outils du mode lecteur (aujourd'hui `SELECTION_DEFAUT`, qui ne les contient pas) et retirer de `prompt_lecteur` la phrase « ne permettent pas de retrouver un député par son nom ». Dépend de `veille.py` (pas encore commité).
 
 ---
 
 ## Plus tard
 
+- [ ] Une fois le vrai rapport intégré (branche `frontend`), tester 5 ou 6 questions de démo, en particulier le cas « rapport + détail Hémicycle » (non vérifiable sur `demo`).
 - [ ] Déclenchement automatique du pipeline le 1ᵉʳ du mois (GitHub Actions, clé en *secret* du repo).
 - [ ] Requêtes sur l'ensemble des mois (DuckDB) pour les comparaisons dans le temps.
 
@@ -147,4 +158,4 @@ Serveur [`chatbot/serveur.py`](chatbot/serveur.py) et page [`frontend/outil-reda
 - [x] Réflexion activée au 1er tour (`CHATBOT_REFLEXION_PREMIER_TOUR`) : sans elle, le modèle n'appelait jamais `surligner_section`.
 - [ ] Front : implémenter les `actions` sur la page du rapport (défilement + mise en évidence), selon `docs/ARCHITECTURE.md`.
 - [ ] Mesurer la taille du rapport réel dans le prompt (le numéro de démo est court) et le coût en latence.
-- [ ] Vérifier que les réponses hors rapport précisent bien « non vérifié par la rédaction ».
+- [x] Vérifier que les réponses hors rapport précisent bien « non vérifié par la rédaction » (prompt lecteur, vérifié sur « Où en est le texte sur l'aide à mourir ? »).

@@ -105,7 +105,7 @@ Requête :
 }
 ```
 
-Réponse (en streaming si possible) :
+Réponse (d'un bloc ; pour suivre la progression pendant l'attente, voir [`POST /chat/flux`](#post-chatflux--la-même-réponse-avec-la-progression) ci-dessous) :
 
 ```json
 {
@@ -149,6 +149,55 @@ Ce que le front doit faire de chaque action `surligner_section`, dans l'ordre de
 4. Option : afficher sous la réponse du chatbot un lien « Voir la section « `titre` » » (qui rejoue le défilement et le surlignage), avec `raison` en infobulle ; pour l'accessibilité, annoncer la section mise en évidence dans une zone `aria-live="polite"`.
 
 Les identifiants sont des *slugs* stables calculés à partir des titres `##` et `###` du rapport : minuscules, sans accents, mots séparés par des tirets (`L'essentiel du mois` → `l-essentiel-du-mois`) ; pour un titre de la forme « Catégorie : sous-titre », seule la catégorie compte (`Focus : …` → `focus`) ; un titre peut fixer son identifiant avec un suffixe `{#mon-id}` ; en cas de doublon, `-2`, `-3`…
+
+#### `POST /chat/flux` — la même réponse, avec la progression
+
+Une question prend de 8 à 45 s (un à trois appels au modèle, plus les appels Hémicycle). Pour afficher où en est le chatbot pendant l'attente, `POST /chat/flux` accepte **exactement le même corps** que `POST /chat` (avec ou sans `mois`) et renvoie les événements au fil de l'eau ; `POST /chat` reste inchangé.
+
+Réponse : HTTP 200, `Content-Type: application/x-ndjson`, en-têtes `Cache-Control: no-store` et `X-Accel-Buffering: no` (pas de mise en mémoire tampon par un proxy). **Un objet JSON par ligne**, terminé par `\n`, envoyé dès qu'il est prêt. Quatre types :
+
+| `type` | Champs | Quand |
+| --- | --- | --- |
+| `etape` | `code`, `message` (texte à afficher tel quel), `t` (secondes depuis le début de la question, une décimale) ; pour `code: "hemicycle"`, aussi `outil` (nom de l'endpoint) et `requete` (requête REST équivalente, `null` si elle ne peut pas être calculée) | À chaque étape (voir ci-dessous) |
+| `appel` | `appel` : l'entrée de `outils_utilises` de la réponse finale (mêmes champs : `outil`, `titre`, `arguments`, `statut`, `credits`, `duree_s`, `requete`…) ; `indice` : sa position dans `outils_utilises` | Quand un appel Hémicycle se termine |
+| `reponse` | `donnees` : **exactement** le JSON que renverrait `POST /chat` (`reponse`, `sources`, `actions`, `outils_utilises`, `meta`…) | Dernière ligne, en cas de succès |
+| `erreur` | `statut` (code HTTP), `detail` (message lisible) | Dernière ligne, en cas d'erreur : mêmes cas et mêmes messages que `POST /chat` (400 numéro ou endpoints invalides, 404 numéro introuvable, 502 / 503 / 504 modèle en erreur, saturé ou injoignable, 500 erreur inattendue) |
+
+Codes d'étape, dans l'ordre où ils peuvent apparaître :
+
+| `code` | `message` |
+| --- | --- |
+| `rapport` | « Lecture du rapport… » (chatbot du rapport seulement, au début) |
+| `analyse` | « Analyse de la question… » (premier appel au modèle) |
+| `rapport_section` | « Recherche dans le rapport… » (outils `lister_sections_rapport` et `surligner_section`) |
+| `recherche_auto` | « Recherche automatique dans Hémicycle… » (le modèle n'a appelé aucun outil : le serveur cherche lui-même) |
+| `hemicycle` | « Recherche dans Hémicycle : <titre de l'endpoint>… » (avant chaque appel Hémicycle, ex. « Recherche dans Hémicycle : Chercher un député… ») |
+| `redaction` | « Rédaction de la réponse… » (chaque appel au modèle qui suit des résultats d'outils ; peut se répéter) |
+| `verification` | « Vérification des sources… » (post-traitement final, juste avant `reponse`) |
+
+Exemple (chatbot du rapport, `{"question": "Comment a voté Frédéric Valletoux sur le scrutin n° 9895 ?", "mois": "demo"}`, raccourci) :
+
+```
+{"type": "etape", "code": "rapport", "message": "Lecture du rapport…", "t": 0.0}
+{"type": "etape", "code": "analyse", "message": "Analyse de la question…", "t": 0.0}
+{"type": "etape", "code": "hemicycle", "message": "Recherche dans Hémicycle : Chercher un député…", "t": 9.9, "outil": "chercher_depute", "requete": {"texte": "POST /v1/jeux/interroger", …}}
+{"type": "appel", "appel": {"outil": "chercher_depute", "statut": "ok", "credits": 1, …}, "indice": 0}
+{"type": "etape", "code": "redaction", "message": "Rédaction de la réponse…", "t": 10.2}
+{"type": "etape", "code": "hemicycle", "message": "Recherche dans Hémicycle : Résultat détaillé d'un scrutin…", "t": 13.3, "outil": "resultat_scrutin", "requete": {"texte": "GET /v1/scrutins/VTANR5L17V9895/resultat", …}}
+{"type": "appel", "appel": {"outil": "resultat_scrutin", "statut": "ok", "credits": 1, …}, "indice": 1}
+{"type": "etape", "code": "redaction", "message": "Rédaction de la réponse…", "t": 13.6}
+{"type": "etape", "code": "verification", "message": "Vérification des sources…", "t": 27.5}
+{"type": "reponse", "donnees": {"reponse": "Frédéric Valletoux, député du groupe « Horizons & Indépendants », a voté pour sur le scrutin n° 9895 (…)", "sources": […], "actions": [], …}}
+```
+
+Côté front :
+
+- lire le corps avec `fetch(...).then(r => r.body.getReader())` (pas `EventSource`, qui ne fait que du GET), décoder en UTF-8, découper sur `\n` en gardant le morceau incomplet pour la lecture suivante, puis `JSON.parse` chaque ligne non vide ;
+- afficher le `message` de la dernière `etape` (le texte est prêt à l'emploi) ; ignorer tout `type` ou `code` inconnu ;
+- traiter `reponse.donnees` exactement comme la réponse de `POST /chat` (texte, sources, `actions` de surlignage) ; sur `erreur`, afficher `detail` ;
+- si le flux se termine sans `reponse` ni `erreur` (coupure réseau), afficher une erreur générique ;
+- un corps invalide (question vide, champ mal typé) reçoit un **HTTP 422** JSON classique, avant tout flux : vérifier `response.ok` avant de lire le flux ;
+- pour abandonner une question (nouvelle question, page fermée), interrompre la requête (`AbortController`) : le serveur annule alors la question en cours, sans consommer d'autres crédits.
 
 ### `GET /api/rapport/{mois}` — le rapport découpé en sections
 
