@@ -137,30 +137,49 @@ Utilisé par **le chatbot** (et pratique pour explorer les données à la main).
 
 ### Outils disponibles (18, tous en lecture seule)
 
-La colonne « Chatbot » est une **proposition** de liste blanche, à valider en équipe.
+Liste et paramètres vérifiés sur le serveur le 14/11/2026 (`tools/list`, serveur `hemicycle` version `2026-10-01`). La colonne « Chatbot » est une **proposition** de liste blanche, à valider en équipe. Le code du chatbot l'applique dans [`backend/chatbot/hemicycle_tools.py`](../backend/chatbot/hemicycle_tools.py).
 
-| Outil | Description | Crédits | Chatbot |
-| --- | --- | --- | --- |
-| `rechercher` | Recherche plein texte (textes, dossiers, amendements) | 2 | ✅ |
-| `lire_texte` | Un texte et son dossier législatif | 1 | ✅ |
-| `lire_amendement` | Un amendement et son sort | 1 | ✅ |
-| `lire_scrutin` | Un scrutin et son décompte | 1 | ✅ |
-| `resultat_scrutin` | Résultat par groupe et par député | 1 | ✅ |
-| `lire_acteur` | Fiche d'un parlementaire | 1 | ✅ |
-| `positions_groupes` | Position de chaque groupe sur jusqu'à 100 scrutins | 1 | ✅ |
-| `guide` | Fiches de savoir-faire | 0 | ✅ |
-| `lister_jeux` | Liste des jeux de données | 0 | ⚠️ |
-| `interroger` | Page d'un jeu de données (filtres, tri, pagination) | 1 à 5 par page | ⚠️ |
-| `classement_auteurs` | Classement des auteurs d'amendements | 5 | ⚠️ |
-| `accord_groupes` | Accord entre deux groupes | 5 | ⚠️ |
-| `loyaute_deputes` | Loyauté des députés envers leur groupe | 5 | ⚠️ |
-| `chercher_entreprise` | Recherche d'entreprise (nom, SIREN, dirigeant) | 2 | ❌ |
-| `chercher_donnees_publiques` | Recherche sur data.gouv.fr | 2 | ❌ |
-| `lire_donnees_publiques` | Lecture de 50 lignes d'un fichier data.gouv.fr | 2 | ❌ |
-| `predire_vote` | Prédiction d'Orcet sur un amendement | 50 | ❌ |
-| `solde_credits` | Solde de crédits du compte | 0 | ❌ |
+| Outil | Description | Paramètres principaux | Crédits | Chatbot |
+| --- | --- | --- | --- | --- |
+| `rechercher` | Recherche plein texte dans les textes, dossiers et amendements de l'**Assemblée nationale** (ni scrutins, ni acteurs) | `q` (requis), `types` (`texte,dossier,amendement`), `limit` (1 à 100) | 2 | ✅ |
+| `lire_texte` | Un texte (projet ou proposition de loi, rapport) et son dossier | `id` (requis) | 1 | ✅ |
+| `lire_amendement` | Un amendement : dispositif, exposé, auteurs et sort | `id` (requis) | 1 | ✅ |
+| `lire_scrutin` | Un scrutin : objet, date, résultat et décompte | `id` (requis) | 1 | ✅ |
+| `resultat_scrutin` | Décompte, position de chaque groupe et vote nominatif de chaque député (AN) | `id` (requis) | 1 | ✅ |
+| `lire_acteur` | Fiche d'un parlementaire et ses mandats | `id` (requis, `PA…`) | 1 | ✅ |
+| `positions_groupes` | Positions des groupes sur 1 à 100 scrutins (AN), sans les votes individuels | `scrutins` (liste d'identifiants, requis) | 1 | ✅ |
+| `guide` | Fiches de savoir-faire en Markdown ; sans argument, l'arborescence | `sujet` (27 valeurs) | 0 | ✅ |
+| `lister_jeux` | Jeux de données : source, licence, colonnes, filtres obligatoires, prix | — | 0 | ⚠️ |
+| `interroger` | Page d'un jeu de données (132 jeux : Parlement, budget, emploi, collectivités, Orcet…) | `jeu` (requis), `filtres`, `recherche`, `colonnes`, `tri`, `ordre`, `limite` (≤ 200), `decalage` | 1 par page ; 5 sur un jeu dérivé ; **50 par prédiction Orcet renvoyée** | ⚠️ |
+| `classement_auteurs` | Classement des députés premiers signataires d'amendements | `texte`, `recherche`, `depuis`, `jusqu_a`, `legislature`, `limite`, `exclure_rapporteurs` (un texte, une recherche ou une période d'un an au plus) | 5 | ⚠️ |
+| `accord_groupes` | Pour **chaque paire** de groupes, part des scrutins où leurs positions majoritaires coïncident | `depuis`, `jusqu_a` ou `legislature` (obligatoire), `intitule`, `types` | 5 | ⚠️ |
+| `loyaute_deputes` | Part des votes de chaque député conformes à la position majoritaire de son groupe | `depuis`, `jusqu_a` ou `legislature` (obligatoire), `intitule`, `groupe`, `min_votes`, `limite` | 5 | ⚠️ |
+| `chercher_entreprise` | Entreprise par nom, SIREN ou dirigeant | `q` (requis), `page` | 2 | ❌ |
+| `chercher_donnees_publiques` | Jeux certifiés de data.gouv.fr (note ≥ 70/100) | `q` (requis) | 2 | ❌ |
+| `lire_donnees_publiques` | 50 lignes au plus d'un fichier data.gouv.fr | `fichier` (requis), `filtres`, `tri`, `ordre`, `lignes` | 2 | ❌ |
+| `predire_vote` | Prédiction d'Orcet sur un amendement | `amendement` (requis) | 50 (0 si aucune prédiction) | ❌ |
+| `solde_credits` | Solde de crédits du compte | — | 0 | ❌ |
 
 ✅ autorisé · ⚠️ à discuter (coût ou résultats volumineux) · ❌ exclu
+
+### Ce qu'a montré le test de connexion (14/11/2026)
+
+Script : `backend/chatbot/mcp_smoke_test.py`.
+
+- **Protocole** : MCP `2025-11-25`, serveur **sans état** (pas d'en-tête `Mcp-Session-Id`). L'en-tête `Hemicycle-Version` n'est pas nécessaire.
+- **Coût réel de chaque appel** : il figure dans le champ `_meta` du résultat d'outil (`credits_cost`, `credits_remaining`, `tarif_version`), et non dans les en-têtes HTTP `X-Credits-*`. 1 crédit = 0,01 € (`solde_credits` renvoie `valeur_eur`).
+- **Format des réponses** : un bloc texte (JSON compact, ou Markdown pour une fiche `guide`) et `structuredContent` (même contenu). Aucun outil ne déclare d'`outputSchema`.
+- **Champ `source`** `{editeur, url, licence}` : à la racine de `resultat_scrutin`, et dans chaque résultat de `rechercher`. Pour les textes, l'URL pointe vers le fichier JSON open data de l'Assemblée (`…/dyn/opendata/<id>.json`), pas vers une page lisible par un lecteur.
+- **Tailles mesurées** :
+  - `resultat_scrutin` : ≈ 86 caractères par votant, soit 15 133 caractères pour 149 votants et ≈ 50 000 caractères (≈ 12 500 tokens) pour un scrutin à 577 votants ;
+  - `rechercher` : ≈ 575 caractères par résultat ;
+  - `guide` sans argument : 4 239 caractères.
+- **Définitions d'outils au format OpenAI** : les 8 outils ✅ font ≈ 4 330 caractères (≈ 1 100 tokens), les 18 outils ≈ 17 300 caractères (≈ 4 300 tokens), dont ≈ 5 100 pour `interroger` seul.
+- **Erreurs** (non facturées) :
+  - clé invalide : HTTP 401 avec une erreur JSON-RPC `-32001` (« Clé d'accès absente ou invalide. ») ;
+  - paramètre invalide : erreur JSON-RPC `-32602`, dont le message liste les valeurs valides.
+- **Identifiants** (fiche `guide` « identifiants ») : texte `PIONANR5L17B0390`, dossier `DLR5L17N51234`, amendement `AMANR5L17PO59048B0390P0D1N000012`, scrutin `VTANR5L17V1234`, acteur `PA841605`, organe `PO59048`.
+- **Instructions du serveur** : elles demandent d'appeler `guide` en premier et orientent vers `lister_jeux` puis `interroger`. Ne pas les transmettre telles quelles au modèle du chatbot.
 
 ### Explorer à la main
 

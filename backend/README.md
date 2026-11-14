@@ -154,3 +154,44 @@ _À compléter une fois la stack choisie._
 # chatbot : lancer le serveur en local
 #   <commande>
 ```
+
+### Tester la connexion à Featherless
+
+Prérequis : un `.env` à la racine du dépôt avec `FEATHERLESS_API_KEY`, `FEATHERLESS_BASE_URL` et `FEATHERLESS_MODEL` (voir [`.env.example`](../.env.example)).
+
+```bash
+cd backend/chatbot
+
+# Installation (avec uv)
+uv venv .venv
+uv pip install --python .venv/bin/python -r requirements.txt
+# … ou sans uv
+# python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+
+# Test sur le modèle du .env, puis sur un autre modèle
+.venv/bin/python smoke_test.py
+.venv/bin/python smoke_test.py --model Qwen/Qwen3.8-27B
+
+# Seulement certains tests (simple, flux, outils, no_think, kwargs)
+.venv/bin/python smoke_test.py --tests simple,outils
+```
+
+Le script vérifie une réponse simple en français, le streaming, un aller-retour complet de *tool calling* avec un outil factice (`lire_scrutin`, données inventées et marquées comme telles), et la désactivation de la réflexion (`/no_think` et `chat_template_kwargs`). Il affiche pour chaque test le résultat, la latence, la présence d'un bloc `<think>` et les tokens consommés. Tous les tests coûtent 6 requêtes par modèle. La clé n'est jamais affichée ; en cas d'erreur 401 ou 403, le script s'arrête aussitôt.
+
+Le client réutilisable est dans [`chatbot/featherless_client.py`](chatbot/featherless_client.py) : configuration lue dans le `.env`, appels normal et en streaming, nouvelles tentatives espacées sur `429` et `503` (en respectant `Retry-After`), retrait des blocs `<think>…</think>`.
+
+### Tester la connexion au MCP Hémicycle
+
+Prérequis : `HEMICYCLE_MCP_URL` et `HEMICYCLE_MCP_KEY` dans le `.env` racine. Même environnement que ci-dessus (`requirements.txt` inclut le SDK MCP).
+
+```bash
+cd backend/chatbot
+.venv/bin/python mcp_smoke_test.py            # gratuit : connexion, outils, JSON OpenAI, appels à 0 crédit
+.venv/bin/python mcp_smoke_test.py --payant   # + resultat_scrutin et rechercher : ≈ 3 crédits réels
+```
+
+Options : `--sans-json`, `--max-caracteres N`, `--scrutin ID`, `--recherche TEXTE`, `--sortie DOSSIER` (réponses complètes en JSON).
+
+Le module réutilisable est dans [`chatbot/hemicycle_tools.py`](chatbot/hemicycle_tools.py) : connexion MCP, liste blanche, conversion au format `tools` d'OpenAI, exécution des `tool_calls` (sans jamais lever d'exception : les erreurs sont renvoyées au modèle sous une forme exploitable), troncature des gros résultats, extraction des sources, compteur d'appels et de crédits par question.
+
+Variables facultatives : `CHATBOT_MCP_OUTILS` (liste blanche, vide = valeur par défaut du code), `CHATBOT_MCP_MAX_CARACTERES` (6000 par résultat), `CHATBOT_MCP_MAX_CARACTERES_QUESTION` (40000 cumulés par question), `CHATBOT_MAX_TOOL_CALLS` (5).

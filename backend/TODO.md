@@ -62,11 +62,12 @@ Contexte : [`backend/README.md`](README.md) · [`docs/ARCHITECTURE.md`](../docs/
 ## 4. Chatbot avec l'API Featherless
 
 - [ ] **Serveur** exposant `POST /chat`, conforme au contrat de [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md).
-- [ ] **Client LLM** : SDK OpenAI pointé sur `https://api.featherless.ai/v1`, clé `FEATHERLESS_API_KEY`.
+- [x] **Client LLM** : SDK OpenAI pointé sur `https://api.featherless.ai/v1`, clé `FEATHERLESS_API_KEY` → [`chatbot/featherless_client.py`](chatbot/featherless_client.py), connexion vérifiée avec `chatbot/smoke_test.py`.
 - [ ] **Prompt système** rédigé à partir des règles éditoriales du chatbot ([`docs/EDITORIAL.md`](../docs/EDITORIAL.md)).
 - [ ] **Réponse en streaming** vers le site.
+  - [x] Streaming depuis Featherless vérifié (`smoke_test.py`) ; reste à le relayer au site.
 - [ ] **Robustesse** :
-  - [ ] gérer les `429` de Featherless (concurrence dépassée), avec un message clair au lecteur ;
+  - [ ] gérer les `429` de Featherless (concurrence dépassée), avec un message clair au lecteur. Nouvelles tentatives espacées (`Retry-After` respecté) déjà dans `featherless_client.py`, testées sur des réponses simulées seulement (aucun vrai `429` rencontré) ; message au lecteur à faire ;
   - [ ] limiter le nombre de requêtes par visiteur et la longueur des questions ;
   - [ ] configurer CORS pour le domaine du site.
 - [ ] **Choisir l'hébergement** du chatbot.
@@ -81,11 +82,20 @@ Contexte : [`backend/README.md`](README.md) · [`docs/ARCHITECTURE.md`](../docs/
 
 ### Le MCP Hémicycle comme complément
 
-- [ ] **Client MCP** (SDK officiel) en *streamable HTTP* sur `HEMICYCLE_MCP_URL`, avec l'en-tête `Authorization: Bearer $HEMICYCLE_MCP_KEY`.
-- [ ] Récupérer la liste des outils, **filtrer selon la liste blanche** ([`docs/API_HEMICYCLE.md`](../docs/API_HEMICYCLE.md#serveur-mcp)) et la convertir au format `tools` d'OpenAI.
-- [ ] **Boucle d'outils** : le modèle renvoie des `tool_calls`, on appelle le MCP, on renvoie un message `role: tool`, et on recommence. Maximum `CHATBOT_MAX_TOOL_CALLS` appels par question.
-- [ ] **Tronquer ou résumer** les résultats d'outils volumineux pour tenir dans le contexte.
-- [ ] Marquer les sources issues du MCP `"verifie_par_la_redaction": false`.
+- [x] **Client MCP** (SDK officiel `mcp` 2.3) en *streamable HTTP* sur `HEMICYCLE_MCP_URL`, avec l'en-tête `Authorization: Bearer $HEMICYCLE_MCP_KEY` — `chatbot/hemicycle_tools.py`.
+- [x] Récupérer la liste des outils, **filtrer selon la liste blanche** ([`docs/API_HEMICYCLE.md`](../docs/API_HEMICYCLE.md#serveur-mcp)) et la convertir au format `tools` d'OpenAI (8 outils ≈ 1 100 tokens).
+- [x] **Exécuter un `tool_call`** et renvoyer un message `role: tool`, avec erreurs exploitables par le modèle (outil non autorisé, JSON invalide, limite atteinte…).
+- [x] **Tronquer** les résultats d'outils volumineux (6 000 caractères par résultat, 40 000 par question ; compacteur dédié pour `resultat_scrutin`).
+- [ ] **Boucle d'outils de bout en bout** avec Featherless : le modèle renvoie des `tool_calls`, on appelle le MCP, on renvoie le résultat, et on recommence. Maximum `CHATBOT_MAX_TOOL_CALLS` appels par question.
+  - Attention : le SDK MCP est **asynchrone** et `featherless_client.py` est **synchrone** → passer à `AsyncOpenAI` (ou faire un pont), et ouvrir la session MCP dans le *lifespan* du serveur.
+- [ ] Marquer les sources issues du MCP `"verifie_par_la_redaction": false` dans la réponse de `/chat` (les sources sont déjà extraites par le module).
+- [ ] **Ne pas transmettre au modèle les instructions du serveur MCP** (elles orientent vers `guide` et `interroger`).
+- [ ] **Mettre dans le prompt système** les formats d'identifiants (`VTANR5L17V…` scrutins, `PA…` députés, `PIONANR5L17B…` textes) et la consigne de limiter `positions_groupes` à une dizaine de scrutins par appel.
+- [ ] **Décider de la liste blanche** (recommandations du test) :
+  - retirer `guide` (définition la plus lourde, inutile pour les lecteurs) ;
+  - `lire_acteur` exige un identifiant `PA…` qu'aucun outil autorisé ne fournit → garder les `PA` dans le compacteur de `resultat_scrutin`, ou autoriser `interroger` limité aux jeux `deputes` / `deputes_en_exercice` ;
+  - garder `interroger` exclu sinon (jusqu'à 50 crédits par prédiction Orcet renvoyée).
+- [ ] Les URL de source renvoyées par `rechercher` pointent vers des fichiers JSON open data : construire des liens lisibles pour les lecteurs.
 - [ ] **Clé dédiée au chatbot** (`hmc_live_`) avec un plafond de crédits par jour. Pour l'instant, la même clé est utilisée pour le pipeline et le chatbot.
 
 ## 6. Modèle : Qwen3-32B
@@ -93,7 +103,12 @@ Contexte : [`backend/README.md`](README.md) · [`docs/ARCHITECTURE.md`](../docs/
 - [x] Disponibilité vérifiée sur Featherless : **`Qwen/Qwen3-32B`** (32K de contexte servis, 2 unités de concurrence, FP8, *tool calling* natif documenté par Featherless).
 - [x] `FEATHERLESS_MODEL` mis à jour dans `.env.example`.
 - [ ] **Premier test de *tool calling*** avec un ou deux outils MCP (ex. `rechercher`, `lire_scrutin`) avant de brancher toute la liste blanche.
-- [ ] **Gérer le raisonnement** : Qwen 3 peut produire un bloc de réflexion (`<think>…</think>`). Soit le filtrer avant d'afficher la réponse, soit le désactiver (à tester : instruction `/no_think` de Qwen 3). Attention, ce bloc consomme aussi du contexte.
+  - [x] Aller-retour complet avec un outil factice `lire_scrutin` (`smoke_test.py`, 14/11/2026) : format OpenAI natif (`tool_calls`, `arguments` en chaîne JSON) et bons arguments sur les deux modèles.
+  - [ ] **Anomalie `Qwen/Qwen3-32B` avec `tools`** : 2 requêtes sur 3 ont renvoyé `Safety: Safe / Categories: None…` (format d'un classifieur de modération, type Qwen3Guard) au lieu d'une réponse, alors que le champ `model` annonce bien `Qwen/Qwen3-32B` ; même requête comptée 310 puis 421 tokens d'entrée. Non observé sans `tools` ni sur `Qwen/Qwen3.8-27B`. À signaler au support Featherless.
+- [ ] **Gérer le raisonnement** : Qwen 3 peut produire un bloc de réflexion (`<think>…</think>`). Soit le filtrer avant d'afficher la réponse, soit le désactiver. Attention, ce bloc consomme aussi du contexte.
+  - [x] Filtrage en mode normal : vérifié sur les deux modèles (`featherless_client.separer_reflexion`).
+  - [ ] Filtrage en streaming : Qwen3.8-27B n'émet que `</think>` (balise ouvrante dans le gabarit) ; correction vérifiée hors ligne sur ce motif, à revérifier en réel (`smoke_test.py --model Qwen/Qwen3.8-27B --tests flux`).
+  - [x] Désactivation : `chat_template_kwargs: {"enable_thinking": false}` (paramètre documenté par Featherless) fonctionne sur les deux modèles. `/no_think` fonctionne sur Qwen3-32B (bloc vide) mais est ignoré par Qwen3.8-27B.
 - [ ] **Construire un jeu d'évaluation** d'une vingtaine de questions types (factuelles, comparaisons d'un mois à l'autre, « mon député », hors sujet, questions orientées), avec les réponses attendues.
   - Vérifier que les réponses s'appuient bien sur le rapport et citent leurs sources.
   - Vérifier la qualité du français et la **neutralité politique**.

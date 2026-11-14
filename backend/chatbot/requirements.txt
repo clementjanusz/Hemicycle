@@ -1,0 +1,6 @@
+# Dépendances du chatbot (installation : voir backend/README.md) — Python ≥ 3.11
+openai>=3.51,<4
+python-dotenv>=1.2,<2
+# Client MCP Hémicycle (SDK officiel ≥ 2.3 : streamable HTTP, en-têtes passés via httpx2)
+mcp>=2.3,<3
+httpx2>=2.10,<3
