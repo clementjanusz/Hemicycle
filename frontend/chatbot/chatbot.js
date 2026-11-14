@@ -136,9 +136,11 @@
   var MOIS = donnees.mois || window.CHATBOT_MOIS || "2026-11";
   var API = String(donnees.api != null ? donnees.api : (window.CHATBOT_API != null ? window.CHATBOT_API : "")).replace(/\/+$/, "");
   var DUREE_SURLIGNAGE = 5000; // ms
+  // Page du dossier (ex. « incendies.html ») : on y va quand la section visée n'est pas sur la page courante.
+  var RAPPORT = donnees.rapport || window.CHATBOT_RAPPORT || "";
 
   var SUGGESTIONS = [
-    "Le crédit d’impôt débroussaillement ?",
+    "Que s’est-il passé sur les incendies ?",
     "Quelles aides pour les entreprises ?",
     "Qui a voté contre le budget ?",
   ];
@@ -248,6 +250,7 @@
         fermerPanneau();
       }
     });
+    initialiserSession(); // fil conservé d'une page à l'autre, [data-chatbot-ouvrir]
   }
 
   // ---------------------------------------------------------------- ouverture, fermeture
@@ -257,6 +260,7 @@
     lanceur.setAttribute("aria-expanded", "true");
     document.documentElement.classList.add("cb-ouvert");
     if (!saisie.disabled) saisie.focus();
+    apresOuverture();
   }
 
   function fermerPanneau() {
@@ -294,6 +298,7 @@
   function message(type, texte) {
     var attributs = { classe: "cb-msg cb-msg--" + type };
     if (type === "erreur") attributs.role = "alert";
+    journaliser({ type: type, texte: texte });
     return ajouterAuFil(el("div", attributs, [el("p", { texte: texte })]));
   }
 
@@ -324,14 +329,14 @@
   /** Clic sur « Voir la section » ou sur une source du rapport : défiler et surligner. */
   function allerALaSection(id) {
     var section = document.getElementById(id);
-    if (!section) return;
+    if (!section) return allerAuRapport(id);
     if (panneauCouvrePage()) fermerPanneau();
     defilerVers(section);
     surligner(section);
   }
 
   function lienSection(classe, id, texte, titre) {
-    var lien = el("a", { classe: classe, href: "#" + id, texte: texte, title: titre || null });
+    var lien = el("a", { classe: classe, href: hrefSection(id), texte: texte, title: titre || null });
     lien.addEventListener("click", function (evenement) {
       evenement.preventDefault();
       allerALaSection(id);
@@ -341,6 +346,7 @@
 
   /** Exécute les actions : défile jusqu'à la première section présente, surligne toutes celles présentes. */
   function executerActions(actions) {
+    if (restauration) return actionsAffichables(actions); // fil restauré : ni défilement ni surlignage
     var presentes = actionsSurlignage(actions).filter(function (a) {
       return document.getElementById(a.section_id);
     });
@@ -349,7 +355,7 @@
       if (indice === 0) defilerVers(section);
       surligner(section);
     });
-    return presentes;
+    return actionsAffichables(actions); // les présentes, plus celles du dossier ouvert ailleurs (data-rapport)
   }
 
   // ---------------------------------------------------------------- affichage d'une réponse
@@ -360,7 +366,7 @@
       if (!s || typeof s !== "object") return;
       if (s.type === "rapport") {
         var libelle = s.section || s.section_id || "Le dossier";
-        var lien = s.section_id && document.getElementById(s.section_id)
+        var lien = sectionAtteignable(s.section_id)
           ? lienSection(null, s.section_id, libelle, s.passage)
           : el("span", { classe: "cb-source-libelle", texte: libelle, title: s.passage || null });
         items.push(el("li", { classe: "cb-source cb-source--rapport" }, [
@@ -536,6 +542,7 @@
       historique.push({ role: "user", contenu: question });
       historique.push({ role: "assistant", contenu: String(donneesReponse.reponse || "").slice(0, MAX_CONTENU_HISTORIQUE) });
       historique = historique.slice(-MAX_HISTORIQUE);
+      apresReponse(donneesReponse); // enregistre le fil ; ouvre le dossier si la section n'est pas ici
     } catch (erreur) {
       if (courante.abandonnee) return; // « Question annulée. » déjà affiché
       message(erreur && erreur.name === "AbortError" ? "info" : "erreur",
@@ -553,6 +560,200 @@
       }
     }
   }
+
+  // ---------------------------------------------------------------- conversation conservée d'une page à l'autre
+  //
+  // sessionStorage (onglet courant) garde, par numéro : l'historique envoyé au serveur, le fil
+  // affiché (questions, réponses brutes, messages) et une consigne en attente pour la page suivante
+  // ({ouvrir: true, section: id}). Sans stockage disponible, tout marche, sans mémoire.
+
+  var CLE_ETAT = "chapo-chatbot:" + MOIS;
+  var CLE_VU = "chapo-chatbot:vu";
+  var MAX_FIL = 60; // entrées du fil gardées
+  var journal = []; // le fil affiché, dans l'ordre
+  var attente = null; // consigne pour la page suivante
+  var restauration = false; // vrai pendant la reconstruction du fil (aucun effet sur la page)
+  var filARedescendre = false;
+
+  function lireSession(cle) {
+    try {
+      var brut = window.sessionStorage.getItem(cle);
+      return brut ? JSON.parse(brut) : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function ecrireSession(cle, valeur) {
+    try {
+      window.sessionStorage.setItem(cle, JSON.stringify(valeur));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function etatSession(alleger) {
+    return {
+      v: 1,
+      historique: historique,
+      attente: attente,
+      fil: journal.map(function (e) {
+        if (!alleger || e.type !== "reponse") return e;
+        var d = e.donnees || {};
+        return { type: "reponse", donnees: { reponse: d.reponse, sources: d.sources, actions: d.actions } };
+      }),
+    };
+  }
+
+  function sauverSession() {
+    // Réponses brutes ; si le quota est dépassé, version allégée (texte, sources, actions).
+    if (!ecrireSession(CLE_ETAT, etatSession(false))) ecrireSession(CLE_ETAT, etatSession(true));
+  }
+
+  function journaliser(entree) {
+    if (restauration) return;
+    journal.push(entree);
+    if (journal.length > MAX_FIL) journal = journal.slice(-MAX_FIL);
+    sauverSession();
+  }
+
+  /** URL du dossier avec l'ancre, ou null (pas de data-rapport, ou on est déjà sur le dossier). */
+  function urlRapport(id) {
+    if (!RAPPORT) return null;
+    try {
+      var url = new URL(RAPPORT, window.location.href);
+      if (url.pathname === window.location.pathname) return null;
+      url.hash = id;
+      return url.href;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function sectionAtteignable(id) {
+    return !!id && (!!document.getElementById(id) || !!urlRapport(id));
+  }
+
+  function hrefSection(id) {
+    return document.getElementById(id) ? "#" + id : urlRapport(id) || "#" + id;
+  }
+
+  /** Actions de surlignage dont la section est ici, ou dans le dossier ouvert ailleurs. */
+  function actionsAffichables(actions) {
+    return actionsSurlignage(actions).filter(function (a) {
+      return sectionAtteignable(a.section_id);
+    });
+  }
+
+  /** Va sur le dossier, à la section `id`, en laissant la consigne d'ouvrir le panneau et de surligner. */
+  function allerAuRapport(id, delai) {
+    var url = urlRapport(id);
+    if (!url) return false;
+    attente = { ouvrir: true, section: id };
+    sauverSession();
+    setTimeout(function () {
+      window.location.href = url;
+    }, delai || 0);
+    return true;
+  }
+
+  /** Après une réponse : l'enregistrer ; si sa section n'est pas sur cette page, ouvrir le dossier. */
+  function apresReponse(donneesReponse) {
+    journaliser({ type: "reponse", donnees: donneesReponse });
+    var liste = actionsSurlignage(donneesReponse && donneesReponse.actions);
+    var ici = liste.some(function (a) { return document.getElementById(a.section_id); });
+    if (!liste.length || ici || !urlRapport(liste[0].section_id)) return;
+    message("info", "Ouverture du rapport…");
+    defilerFilEnBas();
+    allerAuRapport(liste[0].section_id, 1000);
+  }
+
+  /** Le lanceur ne sautille que tant que le panneau n'a jamais été ouvert dans l'onglet. */
+  function marquerVu() {
+    document.documentElement.setAttribute("data-cb-vu", "1");
+    ecrireSession(CLE_VU, 1);
+  }
+
+  function apresOuverture() {
+    marquerVu();
+    if (filARedescendre) {
+      filARedescendre = false;
+      defilerFilEnBas();
+    }
+  }
+
+  /** Reconstruit le fil enregistré, sans défilement ni surlignage. Renvoie la consigne en attente. */
+  function restaurerSession() {
+    var etat = lireSession(CLE_ETAT);
+    if (!etat || typeof etat !== "object") return null;
+    if (Array.isArray(etat.historique)) {
+      historique = etat.historique.filter(function (m) {
+        return m && (m.role === "user" || m.role === "assistant") && typeof m.contenu === "string";
+      }).slice(-MAX_HISTORIQUE);
+    }
+    var entrees = (Array.isArray(etat.fil) ? etat.fil : []).filter(function (e) {
+      if (!e || typeof e !== "object") return false;
+      if (e.type === "reponse") return !!e.donnees && typeof e.donnees === "object";
+      return (e.type === "lecteur" || e.type === "info" || e.type === "erreur") && typeof e.texte === "string";
+    });
+    journal = [];
+    if (entrees.length) retirer(accueil);
+    restauration = true;
+    try {
+      entrees.forEach(function (e) {
+        if (e.type === "reponse") afficherReponse(e.donnees);
+        else message(e.type, e.texte);
+        journal.push(e);
+      });
+    } catch (erreur) {
+      // Une entrée illisible ne doit pas bloquer le widget.
+    } finally {
+      restauration = false;
+    }
+    filARedescendre = journal.length > 0;
+    var derniere = journal[journal.length - 1];
+    if (derniere && derniere.type === "lecteur") message("info", "Question interrompue par le changement de page.");
+    return etat.attente && etat.attente.ouvrir ? etat.attente : null;
+  }
+
+  function initialiserSession() {
+    var enAttente = restaurerSession();
+
+    // Tout élément [data-chatbot-ouvrir] ouvre le panneau ; une valeur non vide est posée comme question.
+    document.addEventListener("click", function (evenement) {
+      var declencheur = evenement.target && evenement.target.closest && evenement.target.closest("[data-chatbot-ouvrir]");
+      if (!declencheur || panneau.contains(declencheur)) return;
+      evenement.preventDefault();
+      var question = (declencheur.getAttribute("data-chatbot-ouvrir") || "").trim();
+      if (question) poser(question);
+      else ouvrir();
+    });
+
+    // Retour arrière (page ressortie du cache du navigateur) : le fil a pu continuer sur une autre
+    // page ; on le relit pour ne pas renvoyer un historique périmé ni écraser l'état enregistré.
+    window.addEventListener("pageshow", function (evenement) {
+      if (!evenement.persisted) return;
+      attente = null;
+      Array.prototype.slice.call(fil.querySelectorAll(".cb-msg")).forEach(retirer);
+      restaurerSession();
+    });
+
+    if (!enAttente) return;
+    attente = null;
+    sauverSession();
+    ouvrir();
+    var section = typeof enAttente.section === "string" && enAttente.section ? document.getElementById(enAttente.section) : null;
+    if (section) {
+      setTimeout(function () {
+        defilerVers(section);
+        surligner(section);
+      }, 150);
+    }
+  }
+
+  // Lanceur déjà vu dans cet onglet : pas de sautillement (posé avant l'injection du widget).
+  if (lireSession(CLE_VU)) document.documentElement.setAttribute("data-cb-vu", "1");
 
   // ---------------------------------------------------------------- démarrage
 

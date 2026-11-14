@@ -1154,3 +1154,30 @@
     box-shadow: none !important;
   }
 }
+
+/* ---------------------------------------------------------------- sautillement du lanceur
+   Attire l'œil tant que le lecteur n'a jamais ouvert le chatbot (le JS pose data-cb-vu sur <html>
+   à la première ouverture, retenu pour la session). Deux rebonds, une pause, et ainsi de suite ;
+   en pause au survol ; aucun mouvement si l'utilisateur réduit les animations. */
+@keyframes cb-sautille {
+  0%, 56%, 100% { transform: translateY(0); }
+  64% { transform: translateY(-12px); }
+  72% { transform: translateY(0); }
+  78% { transform: translateY(-6px); }
+  84% { transform: translateY(0); }
+}
+
+html:not([data-cb-vu]) .cb-lanceur[aria-expanded="false"] {
+  animation: cb-sautille 2.8s cubic-bezier(.3, .7, .4, 1) 1s infinite;
+}
+
+html:not([data-cb-vu]) .cb-lanceur[aria-expanded="false"]:hover,
+html:not([data-cb-vu]) .cb-lanceur[aria-expanded="false"]:focus-visible {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-cb-vu]) .cb-lanceur[aria-expanded="false"] {
+    animation: none;
+  }
+}
