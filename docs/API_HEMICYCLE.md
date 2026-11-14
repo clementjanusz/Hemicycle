@@ -125,12 +125,43 @@ Seuls 429, 500 et 503 justifient une nouvelle tentative.
 - Données publiques brutes : citer l'éditeur d'origine (Assemblée nationale, Sénat…) en reprenant l'objet `source`.
 - Données calculées par Hémicycle (agrégats, prédictions) : citer « Source : Hémicycle ».
 
-## Explorer sans coder : le serveur MCP
+## Serveur MCP
 
-Pour explorer les données en langage naturel avant d'écrire du code, ajouter le connecteur MCP dans Claude, ChatGPT, Le Chat ou Cursor :
+Utilisé par **le chatbot** (et pratique pour explorer les données à la main).
 
-```
-https://api.hemicycle.ai/mcp
-```
+- **URL** : `https://api.hemicycle.ai/mcp`
+- **Transport** : *streamable HTTP*
+- **Authentification** : en-tête `Authorization: Bearer <clé>` — utiliser une clé dédiée au chatbot
+- **Coût** : le MCP consomme les crédits et le quota de la clé utilisée
+- Doc : [hemicycle.ai/docs/mcp](https://hemicycle.ai/docs/mcp) · [outils disponibles](https://hemicycle.ai/docs/mcp/outils)
 
-Doc : [hemicycle.ai/docs/mcp](https://hemicycle.ai/docs/mcp)
+### Outils disponibles (18, tous en lecture seule)
+
+La colonne « Chatbot » est une **proposition** de liste blanche, à valider en équipe.
+
+| Outil | Description | Crédits | Chatbot |
+| --- | --- | --- | --- |
+| `rechercher` | Recherche plein texte (textes, dossiers, amendements) | 2 | ✅ |
+| `lire_texte` | Un texte et son dossier législatif | 1 | ✅ |
+| `lire_amendement` | Un amendement et son sort | 1 | ✅ |
+| `lire_scrutin` | Un scrutin et son décompte | 1 | ✅ |
+| `resultat_scrutin` | Résultat par groupe et par député | 1 | ✅ |
+| `lire_acteur` | Fiche d'un parlementaire | 1 | ✅ |
+| `positions_groupes` | Position de chaque groupe sur jusqu'à 100 scrutins | 1 | ✅ |
+| `guide` | Fiches de savoir-faire | 0 | ✅ |
+| `lister_jeux` | Liste des jeux de données | 0 | ⚠️ |
+| `interroger` | Page d'un jeu de données (filtres, tri, pagination) | 1 à 5 par page | ⚠️ |
+| `classement_auteurs` | Classement des auteurs d'amendements | 5 | ⚠️ |
+| `accord_groupes` | Accord entre deux groupes | 5 | ⚠️ |
+| `loyaute_deputes` | Loyauté des députés envers leur groupe | 5 | ⚠️ |
+| `chercher_entreprise` | Recherche d'entreprise (nom, SIREN, dirigeant) | 2 | ❌ |
+| `chercher_donnees_publiques` | Recherche sur data.gouv.fr | 2 | ❌ |
+| `lire_donnees_publiques` | Lecture de 50 lignes d'un fichier data.gouv.fr | 2 | ❌ |
+| `predire_vote` | Prédiction d'Orcet sur un amendement | 50 | ❌ |
+| `solde_credits` | Solde de crédits du compte | 0 | ❌ |
+
+✅ autorisé · ⚠️ à discuter (coût ou résultats volumineux) · ❌ exclu
+
+### Explorer à la main
+
+Le même serveur peut être ajouté comme connecteur dans Claude, ChatGPT, Le Chat ou Cursor pour explorer les données en langage naturel, par exemple pour chercher l'angle du focus du mois.

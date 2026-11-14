@@ -11,9 +11,10 @@ Quelques règles simples pour travailler à plusieurs sans se marcher dessus pen
 2. Créer une branche nommée selon le pôle et le sujet :
    ```
    front/<sujet>     ex. front/carte-hemicycle
-   back/<sujet>      ex. back/cache-scrutins
+   back/<sujet>      ex. back/chatbot-outils-mcp
    data/<sujet>      ex. data/nettoyage-amendements
-   docs/<sujet>      ex. docs/plan-article
+   docs/<sujet>      ex. docs/regles-chatbot
+   rapport/AAAA-MM   ex. rapport/2026-10   (rédaction d'un numéro)
    ```
 3. Committer souvent, par petits morceaux.
 4. Ouvrir une **pull request** vers `main` et demander une relecture à une personne de l'équipe.
@@ -46,11 +47,11 @@ Ajouter un label de pôle (`frontend`, `backend`, `data`, `editorial`) et s'assi
 
 ## Ce qu'on ne commit jamais
 
-- Le fichier `.env` ou toute clé API (`hmc_test_…`, `hmc_live_…`).
+- Le fichier `.env` ou toute clé API (Hémicycle `hmc_test_…` / `hmc_live_…`, Featherless).
 - Les réponses brutes de l'API (`data/raw/`) — elles restent en local.
 - Les dossiers de dépendances (`node_modules/`, `.venv/`…).
 
-Si une clé a été commitée par erreur : la **révoquer immédiatement** sur [hemicycle.ai/compte-api](https://hemicycle.ai/compte-api) et en créer une nouvelle — la supprimer de l'historique ne suffit pas.
+Si une clé a été commitée par erreur : la **révoquer immédiatement** (Hémicycle : [hemicycle.ai/compte-api](https://hemicycle.ai/compte-api) ; Featherless : tableau de bord) et en créer une nouvelle — la supprimer de l'historique ne suffit pas.
 
 ## Données et sources
 

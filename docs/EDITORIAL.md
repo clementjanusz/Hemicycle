@@ -1,48 +1,71 @@
 # Ligne éditoriale
 
-Document de travail de la rédaction. C'est lui qui guide ce que le back-end va chercher et ce que le front-end va montrer.
+Document de travail de la rédaction. C'est lui qui guide ce que le pipeline calcule, ce que le site montre et ce que le chatbot peut dire.
 
-## Angle
+## Le projet
 
-**Question centrale** : _une phrase, la question à laquelle le rapport répond._
+**Titre du rapport** : _à définir_
 
-**Pourquoi maintenant** : _actualité, enjeu, ce qui rend le sujet pertinent._
+**Promesse au lecteur** : _une phrase — ce que le lecteur saura chaque mois en lisant le rapport._
 
-**Ce qu'on veut montrer** : _le ou les messages principaux, si les données les confirment._
+## Format d'un numéro mensuel
 
-## Pistes à explorer
+Chaque numéro combine deux parties :
 
-Une piste = une issue GitHub « Piste éditoriale ». Quelques idées pour démarrer, à partir de ce que permet l'API :
+| Partie | Principe | Pourquoi |
+| --- | --- | --- |
+| **Baromètre** | Les mêmes indicateurs chaque mois, calculés de la même façon. | Permet de comparer d'un mois à l'autre et de suivre les tendances. |
+| **Focus** | Un sujet d'enquête choisi par la rédaction pour le mois. | Apporte l'angle journalistique, l'analyse et le récit. |
 
-- Cohésion des groupes : quels députés votent le plus souvent contre leur groupe ? (`/agregats/loyaute-deputes`)
-- Alliances de fait : quels groupes votent ensemble, sur quels sujets ? (`/agregats/accord-groupes`)
-- Fabrique de la loi : qui dépose le plus d'amendements, et combien sont adoptés ? (`/agregats/classement-auteurs`, `/amendements`)
-- Parcours d'un texte : de son dépôt à sa promulgation au Journal officiel (`/dossiers`)
-- Lobbying : quels représentants d'intérêts gravitent autour d'un texte ? (HATVP)
-- Écart entre discours et votes : croiser débats, presse et scrutins
+Modèle d'un numéro : [`rapports/_modele/rapport.md`](../rapports/_modele/rapport.md).
 
-## Plan du rapport
+### Indicateurs du baromètre
 
-| # | Section | Message clé | Données / dataviz | Statut |
-| --- | --- | --- | --- | --- |
-| 0 | Introduction / chapô | | | ⬜ |
-| 1 | _…_ | | | ⬜ |
-| 2 | _…_ | | | ⬜ |
-| 3 | _…_ | | | ⬜ |
-| — | Méthodologie et sources | Comment on a travaillé | | ⬜ |
+À définir une fois pour toutes (changer un indicateur casse la comparaison avec les mois précédents).
+
+| Indicateur | Définition précise | Endpoint(s) Hémicycle |
+| --- | --- | --- |
+| _ex. Nombre de scrutins publics_ | _scrutins dont la date tombe dans le mois, AN uniquement_ | `GET /scrutins` |
+| _ex. Taux de loyauté moyen par groupe_ | _…_ | `POST /agregats/loyaute-deputes` |
+| _ex. Groupes qui votent le plus ensemble_ | _…_ | `POST /agregats/accord-groupes` |
+| _ex. Amendements déposés / adoptés_ | _…_ | `GET /amendements` |
+| _…_ | | |
+
+### Idées de focus
+
+Une piste = une issue GitHub « Piste éditoriale ».
+
+- Les députés qui votent contre leur propre groupe.
+- Les alliances de fait entre groupes, et sur quels sujets.
+- La fabrique de la loi : qui dépose le plus d'amendements, et combien sont adoptés.
+- Le parcours d'un texte phare, de son dépôt au Journal officiel.
+- Le lobbying autour d'un texte (répertoire HATVP).
+- L'écart entre discours (débats, presse) et votes.
+
+## Le chatbot : règles éditoriales
+
+Le chatbot parle au nom du rapport : il doit respecter les mêmes standards que le texte.
+
+- **Le rapport fait foi.** Il répond d'abord à partir du rapport et des indicateurs du mois.
+- **Transparence sur les sources.** Ce qui vient d'Hémicycle en direct (via le MCP) est signalé comme « non vérifié par la rédaction », avec le lien vers la source officielle.
+- **Neutralité.** Des faits et des votes, pas d'opinions ni de pronostics politiques.
+- **Humilité.** « Je ne sais pas » vaut mieux qu'une réponse inventée.
+- **Périmètre.** Il refuse poliment les questions sans rapport avec le Parlement ou le rapport.
+
+Ces règles serviront de base au prompt système du chatbot.
 
 ## Vérification (fact-checking)
 
-Avant publication, pour chaque chiffre du rapport :
+Avant publication d'un numéro, pour chaque chiffre :
 
-- [ ] Le chiffre est retrouvable à partir d'une source officielle (lien dans l'objet `source`).
-- [ ] La période et le périmètre sont précisés (législature, dates, chambre).
+- [ ] Le chiffre est retrouvable à partir d'une source officielle (champ `source`).
+- [ ] La période et le périmètre sont précisés (mois, chambre, législature).
 - [ ] Une deuxième personne a refait le calcul ou vérifié la requête.
+- [ ] Le chiffre est cohérent avec le mois précédent, ou l'écart est expliqué.
 - [ ] Les données calculées par Hémicycle (agrégats, prédictions) sont présentées comme telles.
 - [ ] Les formulations ne disent pas plus que ce que montrent les données.
 
-## Sources
+## Citer les sources
 
-| Donnée | Éditeur | Lien officiel | Licence |
-| --- | --- | --- | --- |
-| _…_ | _Assemblée nationale_ | | _Licence Ouverte 2.0_ |
+- Données publiques brutes : citer l'éditeur d'origine (Assemblée nationale, Sénat…) et la licence, à partir du champ `source`.
+- Données calculées par Hémicycle : « Source : Hémicycle ».

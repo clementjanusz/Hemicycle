@@ -1,35 +1,34 @@
-# Front-end — le rapport
+# Front-end — le site du rapport
 
-Ce dossier contient la partie visible du projet : la page (ou les pages) du rapport journalistique, avec la mise en récit et les visualisations de données.
+Un **site statique** qui publie chaque mois un nouveau numéro du rapport, avec ses visualisations, ses archives et un chatbot pour poser des questions.
 
-## Responsabilités
+## Ce que contient le site
 
-- Afficher le récit : textes, chiffres clés, citations, encadrés méthodologiques.
-- Construire les dataviz (graphiques, hémicycle, cartes, tableaux interactifs).
-- Récupérer les données **uniquement via le back-end** (ou les fichiers de `data/processed/`).
-- Afficher les sources sous chaque visualisation.
+- **La page du numéro du mois** : texte de `rapports/AAAA-MM/rapport.md` + dataviz construites à partir de `data/processed/AAAA-MM/`.
+- **Les archives** : un numéro par mois, avec la possibilité de comparer dans le temps.
+- **Une page Méthodologie** : d'où viennent les données, comment les chiffres sont calculés.
+- **Le widget chatbot** : le lecteur pose une question, le site appelle `POST /chat` (voir [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md)). Les sources de chaque réponse sont affichées, en distinguant visuellement celles **issues du rapport** (vérifiées par la rédaction) de celles **issues d'Hémicycle en direct** (non vérifiées).
 
 ## Ce que le front ne fait pas
 
-- ❌ Appeler directement `api.hemicycle.ai` — la clé API exposerait le compte et les crédits de l'équipe.
-- ❌ Faire des calculs lourds sur les données : ils sont faits en amont par le back-end.
+- ❌ Appeler l'API Hémicycle — toutes les données sont déjà calculées par le pipeline.
+- ❌ Calculer des chiffres : il affiche ceux de `indicateurs.json`, pour que le texte, les graphiques et le chatbot disent la même chose.
+- ❌ Détenir une clé API.
 
 ## Stack
 
 _À choisir en équipe — noter la décision dans [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md)._
 
-Pistes adaptées à un rapport de type « long format » / scrollytelling :
-
 | Besoin | Options |
 | --- | --- |
-| Framework | Astro, SvelteKit, Next.js, ou simple Vite + HTML |
+| Générateur de site | Astro (très adapté : contenu en Markdown + une page par mois), SvelteKit, Next.js en export statique |
 | Dataviz | Observable Plot, D3.js, Chart.js, ECharts |
 | Scrollytelling | Scrollama |
 | Style | CSS natif, Tailwind |
 
-## Travailler sans attendre le back-end
+## Travailler sans attendre le pipeline
 
-Tant que le back-end n'est pas prêt, utiliser des fichiers JSON d'exemple qui respectent le **contrat d'API interne** décrit dans [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md). Les ranger dans `frontend/mocks/`.
+Utiliser des fichiers d'exemple qui respectent les **contrats de données** de [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md) (`indicateurs.json`, réponse de `/chat`) et les ranger dans `frontend/mocks/`.
 
 ## Lancer le projet
 
@@ -42,10 +41,10 @@ npm install
 npm run dev
 ```
 
-## Checklist avant la démo
+## Checklist avant publication d'un numéro
 
 - [ ] Chaque graphique a un titre, une légende et une source.
-- [ ] Les chiffres du texte correspondent à ceux des graphiques.
+- [ ] Les chiffres du texte correspondent à ceux de `indicateurs.json`.
+- [ ] Les couleurs des groupes politiques sont les mêmes d'un graphique et d'un mois à l'autre.
 - [ ] La page est lisible sur mobile.
-- [ ] Les couleurs des groupes politiques sont cohérentes d'un graphique à l'autre.
-- [ ] Une section « Méthodologie » explique d'où viennent les données.
+- [ ] Le numéro apparaît dans les archives.
