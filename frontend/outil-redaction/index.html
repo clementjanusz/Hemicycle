@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Veille parlementaire</title>
+<meta name="description" content="Outil interne de la rédaction : réponses brèves et sourcées sur l'actualité de l'Assemblée nationale, à partir des données d'Hémicycle.">
+<style>
+  :root {
+    --fond: #f6f5f1;
+    --carte: #ffffff;
+    --texte: #1d1d1b;
+    --discret: #5f5e58;
+    --bordure: #dcd9cf;
+    --accent: #1f4e8c;
+    --accent-texte: #ffffff;
+    --alerte-fond: #fff4d6;
+    --alerte-texte: #6b4a00;
+    --non-verifie-fond: #fde8e4;
+    --non-verifie-texte: #8a2a17;
+    --erreur: #a1260d;
+    --rayon: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fond: #17181a;
+      --carte: #212226;
+      --texte: #ecebe7;
+      --discret: #a9a8a2;
+      --bordure: #3a3b40;
+      --accent: #7fa8e3;
+      --accent-texte: #0f1420;
+      --alerte-fond: #3b3220;
+      --alerte-texte: #f2d899;
+      --non-verifie-fond: #43251f;
+      --non-verifie-texte: #f4b6a8;
+      --erreur: #ff8f78;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--fond);
+    color: var(--texte);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 760px; margin: 0 auto; padding: 20px 16px 48px; }
+  header h1 { font-size: 1.35rem; margin: 0 0 4px; }
+  header p { margin: 0; color: var(--discret); font-size: .92rem; }
+  #etat { margin-top: 6px; font-size: .8rem; color: var(--discret); }
+  .rapides { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 10px; }
+  button {
+    font: inherit; cursor: pointer; border-radius: 999px;
+    border: 1px solid var(--bordure); background: var(--carte); color: var(--texte);
+    padding: 7px 14px; font-size: .9rem;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:focus-visible, textarea:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button:disabled { opacity: .55; cursor: wait; }
+  button.principal { background: var(--accent); color: var(--accent-texte); border-color: var(--accent); font-weight: 600; }
+  form { display: flex; flex-direction: column; gap: 8px; }
+  textarea {
+    font: inherit; width: 100%; min-height: 76px; resize: vertical; padding: 10px 12px;
+    border-radius: var(--rayon); border: 1px solid var(--bordure); background: var(--carte); color: var(--texte);
+  }
+  .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .actions .aide { color: var(--discret); font-size: .8rem; margin-left: auto; }
+  #attente { display: none; align-items: center; gap: 10px; margin: 16px 0; color: var(--discret); }
+  #attente.visible { display: flex; }
+  .rond {
+    width: 16px; height: 16px; border-radius: 50%;
+    border: 2px solid var(--bordure); border-top-color: var(--accent);
+    animation: tourne 0.9s linear infinite;
+  }
+  @keyframes tourne { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .rond { animation: none; } }
+  #fil { display: flex; flex-direction: column-reverse; gap: 14px; margin-top: 16px; }
+  .carte {
+    background: var(--carte); border: 1px solid var(--bordure); border-radius: var(--rayon);
+    padding: 14px 16px;
+  }
+  .question { font-weight: 600; margin: 0 0 8px; }
+  .reponse p { margin: 0 0 6px; }
+  .reponse ul { margin: 0 0 6px; padding-left: 20px; }
+  .reponse li { margin-bottom: 4px; }
+  .avertissement {
+    background: var(--alerte-fond); color: var(--alerte-texte);
+    border-radius: 6px; padding: 6px 10px; font-size: .85rem; margin: 8px 0 0;
+  }
+  .erreur { color: var(--erreur); }
+  h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: var(--discret); margin: 14px 0 6px; }
+  .sources { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .sources li { font-size: .88rem; overflow-wrap: anywhere; }
+  .sources a { color: var(--accent); }
+  .sources .detail { color: var(--discret); font-size: .8rem; }
+  .badge {
+    display: inline-block; font-size: .72rem; border-radius: 4px; padding: 1px 6px; margin-left: 4px;
+    background: var(--non-verifie-fond); color: var(--non-verifie-texte); white-space: nowrap;
+  }
+  .badge.neutre { background: transparent; border: 1px solid var(--bordure); color: var(--discret); }
+  .pied {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
+    margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--bordure);
+    font-size: .82rem; color: var(--discret);
+  }
+  .pied button { margin-left: auto; padding: 5px 12px; font-size: .85rem; }
+  details { font-size: .8rem; color: var(--discret); margin-top: 6px; }
+  details pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 6px 0 0; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Veille parlementaire</h1>
+    <p>Réponses brèves sur l'actualité de l'Assemblée nationale, tirées uniquement des données d'Hémicycle. Données consultées en direct, <strong>non vérifiées par la rédaction</strong> : à recouper avant publication.</p>
+    <div id="etat" aria-live="polite"></div>
+  </header>
+
+  <div class="rapides" role="group" aria-label="Questions rapides">
+    <button type="button" data-question="Quoi de neuf à l'Assemblée cette semaine ?">Cette semaine à l'Assemblée</button>
+    <button type="button" data-question="Quels sont les derniers scrutins à l'Assemblée ?">Derniers scrutins</button>
+    <button type="button" data-question="Quels textes sont inscrits à l'ordre du jour des séances cette semaine ?">Textes en discussion</button>
+    <button type="button" data-question="Quels ont été les votes solennels depuis le début du mois ?">Votes solennels du mois</button>
+  </div>
+
+  <form id="formulaire">
+    <textarea id="question" name="question" aria-label="Question" maxlength="1000" placeholder="Ex. : Où en est le texte sur l'aide à mourir ?" required></textarea>
+    <div class="actions">
+      <button type="submit" class="principal" id="envoyer">Demander</button>
+      <button type="button" id="nouvelle">Nouvelle conversation</button>
+      <span class="aide">Ctrl + Entrée pour envoyer</span>
+    </div>
+  </form>
+
+  <div id="attente" role="status" aria-live="polite"><span class="rond" aria-hidden="true"></span><span id="attente-texte">Recherche en cours…</span></div>
+
+  <section id="fil" aria-label="Réponses"></section>
+</main>
+
+<script>
+(() => {
+  "use strict";
+  const formulaire = document.getElementById("formulaire");
+  const champ = document.getElementById("question");
+  const envoyer = document.getElementById("envoyer");
+  const attente = document.getElementById("attente");
+  const attenteTexte = document.getElementById("attente-texte");
+  const fil = document.getElementById("fil");
+  const etat = document.getElementById("etat");
+  let historique = [];   // [{role, contenu}] envoyé à POST /chat pour les questions de suivi
+  let enCours = false;
+
+  function el(balise, attributs = {}, enfants = []) {
+    const noeud = document.createElement(balise);
+    for (const [cle, valeur] of Object.entries(attributs)) {
+      if (cle === "texte") noeud.textContent = valeur;
+      else if (cle === "classe") noeud.className = valeur;
+      else noeud.setAttribute(cle, valeur);
+    }
+    for (const enfant of [].concat(enfants)) if (enfant) noeud.append(enfant);
+    return noeud;
+  }
+
+  // Mise en forme minimale et sûre : texte échappé, puces et **gras** seulement.
+  function enrichir(ligne) {
+    const fragment = document.createDocumentFragment();
+    ligne.split(/(\*\*[^*]+\*\*)/).forEach((morceau) => {
+      if (/^\*\*[^*]+\*\*$/.test(morceau)) fragment.append(el("strong", { texte: morceau.slice(2, -2) }));
+      else if (morceau) fragment.append(document.createTextNode(morceau));
+    });
+    return fragment;
+  }
+
+  function afficherTexte(texte) {
+    const bloc = el("div", { classe: "reponse" });
+    let liste = null;
+    for (const brute of texte.split(/\r?\n/)) {
+      const ligne = brute.trim();
+      if (!ligne) { liste = null; continue; }
+      const puce = ligne.match(/^([-*•]|\d+[.)])\s+(.*)$/);
+      if (puce) {
+        if (!liste) { liste = el("ul"); bloc.append(liste); }
+        liste.append(el("li", {}, enrichir(puce[2])));
+      } else {
+        liste = null;
+        bloc.append(el("p", {}, enrichir(ligne)));
+      }
+    }
+    return bloc;
+  }
+
+  function lienSur(url) {
+    try { const u = new URL(url); return u.protocol === "https:" || u.protocol === "http:" ? u.href : null; }
+    catch { return null; }
+  }
+
+  function afficherSources(sources) {
+    const liste = el("ul", { classe: "sources" });
+    for (const s of sources) {
+      const libelle = s.libelle || s.editeur || "Source";
+      const url = lienSur(s.url);
+      const titre = url ? el("a", { href: url, target: "_blank", rel: "noopener noreferrer", texte: libelle }) : el("span", { texte: libelle });
+      const badges = [];
+      if (s.verifie_par_la_redaction === false) badges.push(el("span", { classe: "badge", texte: "non vérifié par la rédaction" }));
+      if (s.citee === false) badges.push(el("span", { classe: "badge neutre", texte: "consultée, non citée" }));
+      const detail = [s.titre, [s.editeur, s.licence].filter(Boolean).join(" · ")].filter(Boolean).join(" — ");
+      liste.append(el("li", {}, [titre, ...badges, detail ? el("div", { classe: "detail", texte: detail }) : null]));
+    }
+    return liste;
+  }
+
+  function texteACopier(donnees) {
+    let texte = donnees.reponse.trim();
+    if (donnees.sources && donnees.sources.length) {
+      texte += "\n\nSources (Hémicycle, non vérifiées par la rédaction) :";
+      for (const s of donnees.sources) texte += `\n- ${s.libelle || s.editeur || "Source"}${s.url ? " — " + s.url : ""}`;
+    }
+    return texte;
+  }
+
+  async function copier(texte, bouton) {
+    try {
+      await navigator.clipboard.writeText(texte);
+    } catch {
+      const zone = el("textarea"); zone.value = texte; document.body.append(zone); zone.select();
+      document.execCommand("copy"); zone.remove();
+    }
+    const avant = bouton.textContent;
+    bouton.textContent = "Copié ✓";
+    setTimeout(() => { bouton.textContent = avant; }, 1500);
+  }
+
+  function carteReponse(question, donnees) {
+    const carte = el("article", { classe: "carte" });
+    carte.append(el("p", { classe: "question", texte: question }));
+    carte.append(afficherTexte(donnees.reponse || ""));
+    for (const a of donnees.avertissements || []) carte.append(el("p", { classe: "avertissement", texte: a }));
+    if (donnees.sources && donnees.sources.length) {
+      carte.append(el("h2", { texte: "Sources" }));
+      carte.append(afficherSources(donnees.sources));
+    }
+    const meta = donnees.meta || {};
+    const credits = Number(donnees.credits || 0);
+    const pied = el("div", { classe: "pied" }, [
+      el("span", { texte: `Coût : ${credits} crédit${credits > 1 ? "s" : ""} Hémicycle` }),
+      meta.duree_s != null ? el("span", { texte: `${String(meta.duree_s).replace(".", ",")} s` }) : null,
+    ]);
+    const boutonCopier = el("button", { type: "button", texte: "Copier" });
+    boutonCopier.addEventListener("click", () => copier(texteACopier(donnees), boutonCopier));
+    pied.append(boutonCopier);
+    carte.append(pied);
+    const outils = donnees.outils_utilises || [];
+    if (outils.length) {
+      const resume = outils.map((o) => `${o.outil} ${JSON.stringify(o.arguments)} → ${o.statut}, ${o.credits} cr.`).join("\n");
+      carte.append(el("details", {}, [el("summary", { texte: `Outils appelés (${outils.length})` }), el("pre", {}, el("code", { texte: resume }))]));
+    }
+    return carte;
+  }
+
+  function carteErreur(question, message) {
+    return el("article", { classe: "carte" }, [
+      el("p", { classe: "question", texte: question }),
+      el("p", { classe: "erreur", texte: message }),
+    ]);
+  }
+
+  async function rafraichirEtat() {
+    try {
+      const r = await fetch("/etat");
+      if (!r.ok) return;
+      const e = await r.json();
+      etat.textContent = `Modèle : ${e.modele} · crédits consommés depuis le démarrage : ${e.credits_serveur} / ${e.plafond_credits_serveur}`;
+    } catch { /* serveur arrêté : on n'affiche rien */ }
+  }
+
+  async function poser(question) {
+    question = question.trim();
+    if (!question || enCours) return;
+    enCours = true;
+    envoyer.disabled = true;
+    document.querySelectorAll(".rapides button").forEach((b) => { b.disabled = true; });
+    const debut = Date.now();
+    attenteTexte.textContent = "Recherche en cours…";
+    attente.classList.add("visible");
+    const minuteur = setInterval(() => {
+      attenteTexte.textContent = `Recherche en cours… ${Math.round((Date.now() - debut) / 1000)} s`;
+    }, 1000);
+    try {
+      const reponse = await fetch("/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question, historique }),
+      });
+      const donnees = await reponse.json().catch(() => ({}));
+      if (!reponse.ok) {
+        const detail = typeof donnees.detail === "string" ? donnees.detail : `Erreur ${reponse.status}.`;
+        fil.append(carteErreur(question, detail));
+      } else {
+        fil.append(carteReponse(question, donnees));
+        historique.push({ role: "user", contenu: question }, { role: "assistant", contenu: donnees.reponse || "" });
+        historique = historique.slice(-6);
+        champ.value = "";
+      }
+    } catch (erreur) {
+      fil.append(carteErreur(question, "Le serveur ne répond pas. Est-il lancé ?"));
+    } finally {
+      clearInterval(minuteur);
+      attente.classList.remove("visible");
+      enCours = false;
+      envoyer.disabled = false;
+      document.querySelectorAll(".rapides button").forEach((b) => { b.disabled = false; });
+      rafraichirEtat();
+    }
+  }
+
+  formulaire.addEventListener("submit", (evenement) => { evenement.preventDefault(); poser(champ.value); });
+  champ.addEventListener("keydown", (evenement) => {
+    if (evenement.key === "Enter" && (evenement.ctrlKey || evenement.metaKey)) { evenement.preventDefault(); poser(champ.value); }
+  });
+  document.querySelectorAll(".rapides button").forEach((bouton) => {
+    bouton.addEventListener("click", () => poser(bouton.dataset.question));
+  });
+  document.getElementById("nouvelle").addEventListener("click", () => {
+    historique = [];
+    fil.replaceChildren();
+    champ.focus();
+  });
+  rafraichirEtat();
+})();
+</script>
+</body>
+</html>

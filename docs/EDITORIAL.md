@@ -46,6 +46,7 @@ Une piste = une issue GitHub « Piste éditoriale ».
 
 Le chatbot parle au nom du rapport : il doit respecter les mêmes standards que le texte.
 
+- **Uniquement Hémicycle.** Le chatbot ne s'appuie que sur des données Hémicycle : le rapport (construit à partir d'Hémicycle) et les résultats des outils du MCP Hémicycle. Jamais sur les connaissances propres du modèle : pas de date, de nom ni de chiffre absent de ces sources.
 - **Le rapport fait foi.** Il répond d'abord à partir du rapport et des indicateurs du mois.
 - **Transparence sur les sources.** Ce qui vient d'Hémicycle en direct (via le MCP) est signalé comme « non vérifié par la rédaction », avec le lien vers la source officielle.
 - **Neutralité.** Des faits et des votes, pas d'opinions ni de pronostics politiques.

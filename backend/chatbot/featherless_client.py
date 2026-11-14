@@ -7,10 +7,13 @@
 - Erreurs 429 (concurrence dépassée) et 503 (capacité insuffisante) :
   quelques nouvelles tentatives espacées, en respectant `Retry-After` s'il est présent.
 - Les blocs de réflexion `<think>…</think>` de Qwen 3 sont retirés du texte renvoyé.
+- Deux clients : `ClientFeatherless` (synchrone) et `ClientFeatherlessAsync`
+  (asynchrone, pour un serveur FastAPI qui partage sa boucle avec le SDK MCP).
 """
 
 from __future__ import annotations
 
+import asyncio
 import email.utils
 import logging
 import os
@@ -24,7 +27,7 @@ from typing import Any, Iterator
 
 import openai
 from dotenv import load_dotenv
-from openai import OpenAI
+from openai import AsyncOpenAI, OpenAI
 
 journal = logging.getLogger("featherless")
 
@@ -332,31 +335,42 @@ def _lire_retry_after(reponse: Any) -> float | None:
     return max(0.0, (date - datetime.now(timezone.utc)).total_seconds())
 
 
-class ClientFeatherless:
-    """Accès au LLM via le SDK OpenAI pointé sur Featherless."""
+def _reponse_chat(completion: Any, duree: float) -> ReponseChat:
+    """Construit un `ReponseChat` à partir de la réponse complète du SDK."""
+    choix = completion.choices[0]
+    texte, reflexion = separer_reflexion(choix.message.content)
+    if reflexion is None:
+        reflexion = _reflexion_separee(choix.message)
+    return ReponseChat(
+        texte=texte,
+        reflexion=reflexion,
+        appels_outils=list(choix.message.tool_calls or []),
+        raison_fin=choix.finish_reason,
+        usage=completion.usage,
+        duree_s=duree,
+        message=choix.message,
+        modele_servi=getattr(completion, "model", None),
+        id_requete=getattr(completion, "_request_id", None) or getattr(completion, "id", None),
+    )
+
+
+class _ClientBase:
+    """Partie commune aux clients synchrone et asynchrone : configuration, paramètres, nouvelles tentatives."""
 
     def __init__(
         self,
-        config: ConfigFeatherless | None = None,
+        config: ConfigFeatherless | None,
         *,
-        modele: str | None = None,
-        tentatives_max: int = 4,
-        delai_initial_s: float = 2.0,
-        delai_max_s: float = 30.0,
-        timeout_s: float = 180.0,
+        modele: str | None,
+        tentatives_max: int,
+        delai_initial_s: float,
+        delai_max_s: float,
     ) -> None:
         self.config = config or charger_config(modele)
         self.tentatives_max = tentatives_max
         self.delai_initial_s = delai_initial_s
         self.delai_max_s = delai_max_s
         self.nb_requetes = 0  # requêtes HTTP réellement envoyées, nouvelles tentatives comprises
-        # max_retries=0 : on gère nous-mêmes les nouvelles tentatives (voir _creer).
-        self._openai = OpenAI(
-            api_key=self.config.cle_api,
-            base_url=self.config.base_url,
-            max_retries=0,
-            timeout=timeout_s,
-        )
 
     @property
     def modele(self) -> str:
@@ -368,29 +382,23 @@ class ClientFeatherless:
             demande = self.delai_initial_s * 2 ** (tentative - 1) + random.uniform(0, 0.5)
         return min(demande, self.delai_max_s)
 
-    def _creer(self, **parametres: Any) -> Any:
-        """Envoie la requête ; nouvelles tentatives espacées sur 429 et 503 uniquement."""
-        for tentative in range(1, self.tentatives_max + 1):
-            self.nb_requetes += 1
-            try:
-                return self._openai.chat.completions.create(**parametres)
-            except openai.APIStatusError as erreur:
-                if erreur.status_code not in CODES_A_RETENTER:
-                    raise  # 400, 401, 403, 404… : inutile de réessayer
-                if tentative == self.tentatives_max:
-                    if erreur.status_code == 429:
-                        raise ConcurrenceDepassee(
-                            f"Featherless : HTTP 429 après {tentative} tentatives "
-                            "(budget de concurrence du plan dépassé)."
-                        ) from erreur
-                    raise
-                delai = self._delai(erreur, tentative)
-                journal.warning(
-                    "Featherless : HTTP %s, nouvelle tentative dans %.1f s (%d/%d)",
-                    erreur.status_code, delai, tentative + 1, self.tentatives_max,
-                )
-                time.sleep(delai)
-        raise AssertionError("inaccessible")
+    def _delai_avant_nouvelle_tentative(self, erreur: openai.APIStatusError, tentative: int) -> float:
+        """Délai avant la tentative suivante ; relève l'erreur s'il ne faut pas réessayer."""
+        if erreur.status_code not in CODES_A_RETENTER:
+            raise erreur  # 400, 401, 403, 404… : inutile de réessayer
+        if tentative == self.tentatives_max:
+            if erreur.status_code == 429:
+                raise ConcurrenceDepassee(
+                    f"Featherless : HTTP 429 après {tentative} tentatives "
+                    "(budget de concurrence du plan dépassé)."
+                ) from erreur
+            raise erreur
+        delai = self._delai(erreur, tentative)
+        journal.warning(
+            "Featherless : HTTP %s, nouvelle tentative dans %.1f s (%d/%d)",
+            erreur.status_code, delai, tentative + 1, self.tentatives_max,
+        )
+        return delai
 
     def _parametres(
         self, messages: list[dict[str, Any]], outils: list[dict[str, Any]] | None,
@@ -406,6 +414,42 @@ class ClientFeatherless:
             parametres["extra_body"] = extra
         return parametres
 
+
+class ClientFeatherless(_ClientBase):
+    """Accès au LLM via le SDK OpenAI pointé sur Featherless (synchrone)."""
+
+    def __init__(
+        self,
+        config: ConfigFeatherless | None = None,
+        *,
+        modele: str | None = None,
+        tentatives_max: int = 4,
+        delai_initial_s: float = 2.0,
+        delai_max_s: float = 30.0,
+        timeout_s: float = 180.0,
+    ) -> None:
+        super().__init__(
+            config, modele=modele, tentatives_max=tentatives_max,
+            delai_initial_s=delai_initial_s, delai_max_s=delai_max_s,
+        )
+        # max_retries=0 : on gère nous-mêmes les nouvelles tentatives (voir _creer).
+        self._openai = OpenAI(
+            api_key=self.config.cle_api,
+            base_url=self.config.base_url,
+            max_retries=0,
+            timeout=timeout_s,
+        )
+
+    def _creer(self, **parametres: Any) -> Any:
+        """Envoie la requête ; nouvelles tentatives espacées sur 429 et 503 uniquement."""
+        for tentative in range(1, self.tentatives_max + 1):
+            self.nb_requetes += 1
+            try:
+                return self._openai.chat.completions.create(**parametres)
+            except openai.APIStatusError as erreur:
+                time.sleep(self._delai_avant_nouvelle_tentative(erreur, tentative))
+        raise AssertionError("inaccessible")
+
     def discuter(
         self,
         messages: list[dict[str, Any]],
@@ -417,22 +461,7 @@ class ClientFeatherless:
         """Appel chat classique (réponse complète d'un coup)."""
         debut = time.perf_counter()
         completion = self._creer(**self._parametres(messages, outils, sans_reflexion, options))
-        duree = time.perf_counter() - debut
-        choix = completion.choices[0]
-        texte, reflexion = separer_reflexion(choix.message.content)
-        if reflexion is None:
-            reflexion = _reflexion_separee(choix.message)
-        return ReponseChat(
-            texte=texte,
-            reflexion=reflexion,
-            appels_outils=list(choix.message.tool_calls or []),
-            raison_fin=choix.finish_reason,
-            usage=completion.usage,
-            duree_s=duree,
-            message=choix.message,
-            modele_servi=getattr(completion, "model", None),
-            id_requete=getattr(completion, "_request_id", None) or getattr(completion, "id", None),
-        )
+        return _reponse_chat(completion, time.perf_counter() - debut)
 
     def discuter_en_flux(
         self,
@@ -450,3 +479,69 @@ class ClientFeatherless:
         debut = time.perf_counter()
         flux = self._creer(stream=True, **self._parametres(messages, None, sans_reflexion, options))
         return FluxChat(flux, debut, reflexion_au_depart=not sans_reflexion)
+
+
+class ClientFeatherlessAsync(_ClientBase):
+    """Variante asynchrone (`AsyncOpenAI`), pour la boucle d'outils du serveur FastAPI.
+
+    Même configuration, mêmes nouvelles tentatives (429 et 503) et même retrait de la
+    réflexion que `ClientFeatherless`. Pas de streaming pour l'instant.
+
+    Exemple ::
+
+        async with ClientFeatherlessAsync() as llm:
+            reponse = await llm.discuter(messages, outils=outils, sans_reflexion=True)
+    """
+
+    def __init__(
+        self,
+        config: ConfigFeatherless | None = None,
+        *,
+        modele: str | None = None,
+        tentatives_max: int = 4,
+        delai_initial_s: float = 2.0,
+        delai_max_s: float = 30.0,
+        timeout_s: float = 180.0,
+    ) -> None:
+        super().__init__(
+            config, modele=modele, tentatives_max=tentatives_max,
+            delai_initial_s=delai_initial_s, delai_max_s=delai_max_s,
+        )
+        self._openai = AsyncOpenAI(
+            api_key=self.config.cle_api,
+            base_url=self.config.base_url,
+            max_retries=0,
+            timeout=timeout_s,
+        )
+
+    async def __aenter__(self) -> ClientFeatherlessAsync:
+        return self
+
+    async def __aexit__(self, *_exc: object) -> None:
+        await self.fermer()
+
+    async def fermer(self) -> None:
+        await self._openai.close()
+
+    async def _creer(self, **parametres: Any) -> Any:
+        """Envoie la requête ; nouvelles tentatives espacées sur 429 et 503 uniquement."""
+        for tentative in range(1, self.tentatives_max + 1):
+            self.nb_requetes += 1
+            try:
+                return await self._openai.chat.completions.create(**parametres)
+            except openai.APIStatusError as erreur:
+                await asyncio.sleep(self._delai_avant_nouvelle_tentative(erreur, tentative))
+        raise AssertionError("inaccessible")
+
+    async def discuter(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        outils: list[dict[str, Any]] | None = None,
+        sans_reflexion: bool = False,
+        **options: Any,
+    ) -> ReponseChat:
+        """Appel chat classique (réponse complète d'un coup)."""
+        debut = time.perf_counter()
+        completion = await self._creer(**self._parametres(messages, outils, sans_reflexion, options))
+        return _reponse_chat(completion, time.perf_counter() - debut)

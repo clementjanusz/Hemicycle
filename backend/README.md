@@ -105,20 +105,20 @@ Lecteur ── question ──▶ POST /chat
 3. **Pas de source, pas de réponse.** S'il ne trouve rien de solide, il le dit.
 4. **Neutralité.** Il expose des faits et des votes, pas d'opinion politique.
 
-### Modèle : Qwen3-32B
+### Modèle : Qwen3.8-27B
 
-Modèle retenu : **[`Qwen/Qwen3-32B`](https://featherless.ai/models/Qwen/Qwen3-32B)**. La famille Qwen 3 fait partie des modèles pour lesquels Featherless documente officiellement le *tool calling* natif, et c'est le modèle utilisé dans leur [exemple](https://featherless.ai/docs/tool-calling).
+Modèle retenu : **[`Qwen/Qwen3.8-27B`](https://featherless.ai/models/Qwen/Qwen3.8-27B)**. C'est le seul des deux modèles testés qui a réussi l'aller-retour d'outils complet : `Qwen/Qwen3-32B` renvoyait des sorties de modération dès qu'on lui passait des `tools`.
 
 | Caractéristique | Valeur sur Featherless |
 | --- | --- |
-| Contexte servi | **32K tokens** → rapport et résultats d'outils à garder compacts |
+| Contexte servi | **256K tokens** |
 | Concurrence | 2 unités par requête |
-| *Tool calling* | Supporté nativement (format OpenAI `tools` / `tool_calls`) |
+| *Tool calling* | Natif quand la réflexion est active ; en texte (format XML de type Qwen3-Coder) quand elle est désactivée, récupéré par le serveur |
 | Quantification | FP8 |
 
-Points de vigilance (détail dans [`TODO.md`](TODO.md#6-modèle--qwen3-32b)) :
+Points de vigilance (détail dans [`TODO.md`](TODO.md#6-modèle--qwen3827b)) :
 
-- Qwen 3 peut produire un bloc de raisonnement (`<think>…</think>`) : le filtrer avant d'afficher la réponse, ou le désactiver ;
+- la réflexion (`<think>…</think>`) rend le modèle lent : désactivée par défaut via `chat_template_kwargs: {"enable_thinking": false}` (`/no_think` est ignoré par ce modèle) ;
 - tester la qualité des réponses en français et la neutralité politique sur un jeu de questions types.
 
 ### Garde-fous
@@ -195,3 +195,28 @@ Options : `--sans-json`, `--max-caracteres N`, `--scrutin ID`, `--recherche TEXT
 Le module réutilisable est dans [`chatbot/hemicycle_tools.py`](chatbot/hemicycle_tools.py) : connexion MCP, liste blanche, conversion au format `tools` d'OpenAI, exécution des `tool_calls` (sans jamais lever d'exception : les erreurs sont renvoyées au modèle sous une forme exploitable), troncature des gros résultats, extraction des sources, compteur d'appels et de crédits par question.
 
 Variables facultatives : `CHATBOT_MCP_OUTILS` (liste blanche, vide = valeur par défaut du code), `CHATBOT_MCP_MAX_CARACTERES` (6000 par résultat), `CHATBOT_MCP_MAX_CARACTERES_QUESTION` (40000 cumulés par question), `CHATBOT_MAX_TOOL_CALLS` (5).
+
+---
+
+## Outil de rédaction (journalistes)
+
+Petit outil web interne : un journaliste pose une question (« Quoi de neuf à l'Assemblée cette semaine ? », « Où en est le texte sur X ? ») et obtient une **réponse très brève et sourcée**, pour préparer le rapport mensuel. Serveur : [`chatbot/serveur.py`](chatbot/serveur.py) (FastAPI, lié à `127.0.0.1`). Page : [`frontend/outil-redaction/index.html`](../frontend/outil-redaction/index.html) (un seul fichier, sans dépendance).
+
+```bash
+cd backend/chatbot
+uv pip install --python .venv/bin/python -r requirements.txt   # une fois (ajoute fastapi et uvicorn)
+.venv/bin/python serveur.py                                     # puis ouvrir http://127.0.0.1:8000/
+# Autre modèle ou réflexion activée, le temps d'un lancement :
+FEATHERLESS_MODEL=Qwen/Qwen3.8-27B .venv/bin/python serveur.py --reflexion
+```
+
+- **Points d'accès** : `GET /` (la page), `POST /chat` (`{"question", "historique"}` → `{"reponse", "sources", "outils_utilises", "credits", "avertissements", "meta"}`), `GET /etat` (modèle, outils, crédits consommés depuis le démarrage).
+- **Hémicycle uniquement** : le prompt interdit les connaissances propres du modèle ; si aucun appel d'outil n'a ramené de source, le serveur remplace la réponse par « Je n'ai pas trouvé cette information dans Hémicycle. » (avec les recherches effectuées). Si le modèle répond sans appeler d'outil, il est relancé une fois. Les dates et nombres de la réponse absents des résultats d'outils sont signalés (« À vérifier »). Toutes les sources portent `"verifie_par_la_redaction": false`.
+- **L'actualité** : deux outils locaux, `derniers_scrutins` (jeu `scrutins`, 17ᵉ législature, du plus récent au plus ancien, filtres date / mots-clés / solennels) et `agenda_seances` (jeu `reunions`, ordre du jour des séances de la semaine). Ils appellent `interroger` **côté serveur**, sur ces deux jeux seulement (jamais Orcet) ; `interroger` n'est jamais exposé au modèle. Outils MCP exposés en plus : `rechercher`, `lire_texte`, `lire_scrutin`, `positions_groupes`, `resultat_scrutin`, `lire_amendement`.
+- **Coût mesuré (14/11/2026, `Qwen/Qwen3.8-27B`)** : 0 à 4 crédits Hémicycle par question (0 à 0,04 €), 2 à 4 requêtes Featherless, 9 à 32 s. Résultats d'outils en cache 10 minutes (même outil, mêmes arguments → 0 crédit).
+- **Garde-fous** : 5 appels d'outils au plus par question (`CHATBOT_MAX_TOOL_CALLS`), 10 crédits par question, 300 crédits depuis le démarrage du serveur (compteur en mémoire), 5 puces au plus dans la réponse, question de 1 000 caractères au plus.
+- **Liens** : page publique de l'Assemblée pour les scrutins (`/dyn/17/scrutins/<numéro>`) et les projets ou propositions de loi (`/dyn/17/textes/l17b<numéro>_projet-loi`) ; fichier open data sinon.
+
+Variables facultatives : `CHATBOT_REFLEXION` (0 par défaut ; 1 = réflexion de Qwen 3 activée, plus lent), `CHATBOT_MAX_CREDITS_QUESTION` (10), `CHATBOT_MAX_CREDITS_SERVEUR` (300), `CHATBOT_CACHE_S` (600), `CHATBOT_MAX_TOKENS` (900, sans réflexion), `CHATBOT_CONCURRENCE_LLM` (1), `CHATBOT_TRACE` (chemin d'un fichier JSONL : question, résultats d'outils vus par le modèle, réponse ; pour vérifier une réponse). Pour comparer, `POST /chat` accepte aussi `"reflexion": true|false`.
+
+Limites connues (détail dans [`TODO.md`](TODO.md#7-outil-de-rédaction-journalistes)) : réponses souvent plus longues que la cible de 80 mots ; avec la réflexion désactivée, `Qwen3.8-27B` écrit ses appels d'outils dans le texte (le serveur les récupère) et oublie parfois d'appeler un outil.
