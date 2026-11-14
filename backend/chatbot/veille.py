@@ -23,7 +23,6 @@ from collections import Counter, OrderedDict
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import Any, Callable, Iterable
-from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
 FUSEAU = ZoneInfo("Europe/Paris")
@@ -77,7 +76,8 @@ def requete_rest(outil_mcp: str, arguments: dict[str, Any] | None) -> dict[str, 
     if "{id}" in chemin:
         chemin = chemin.replace("{id}", str(arguments.pop("id", "") or "?"))
     if methode == "GET" and arguments:
-        # Affichage lisible (non encodé) ; `url` contient la version encodée.
+        # Affichage lisible, non encodé. Noms de paramètres identiques au MCP (vérifié en REST le 14/11/2026,
+        # docs/RAPPORT_API_HEMICYCLE.md § 12.1) ; sur un GET, un paramètre inconnu est ignoré mais facturé.
         chemin += "?" + "&".join(
             f"{cle}={','.join(map(str, v)) if isinstance(v, list) else v}" for cle, v in arguments.items()
         )
