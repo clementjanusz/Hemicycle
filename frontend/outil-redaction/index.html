@@ -108,6 +108,7 @@
   .endpoint.indisponible { opacity: .55; }
   .cout { font-size: .72rem; border-radius: 4px; padding: 0 6px; border: 1px solid var(--bordure); color: var(--discret); white-space: nowrap; }
   .cout.fort { color: var(--cout-fort); border-color: currentColor; }
+  .cout.tres-cher { color: var(--erreur); border-color: currentColor; font-weight: 650; }
   .lien-discret { background: none; border: none; padding: 0; color: var(--accent); font-size: .76rem; cursor: pointer; text-decoration: underline; }
   .non-proposes { margin-top: 10px; font-size: .8rem; color: var(--discret); }
   .non-proposes ul { margin: 6px 0 0; padding-left: 18px; }
@@ -405,6 +406,9 @@
 
   // ---------- Catalogue et sélection des endpoints ----------
   const endpointsDisponibles = () => (catalogue ? catalogue.endpoints.filter((e) => e.disponible) : []);
+  // Sélection par défaut et bouton « Tout » : tous les endpoints disponibles, sauf les endpoints « opt-in »
+  // (prévisions d'Orcet, 50 crédits), à cocher volontairement.
+  const endpointsParDefaut = () => endpointsDisponibles().filter((e) => !e.opt_in);
   const parNom = (nom) => (catalogue ? catalogue.endpoints.find((e) => e.nom === nom) : null);
 
   // Route REST de l'endpoint, avec {id} à la place de l'identifiant d'exemple.
@@ -414,7 +418,7 @@
   }
 
   function badgeCout(cout) {
-    return el("span", { classe: "cout" + (cout >= 5 ? " fort" : ""), texte: `${cout} cr.` });
+    return el("span", { classe: "cout" + (cout >= 50 ? " tres-cher" : cout >= 5 ? " fort" : ""), texte: `${cout} cr.` });
   }
 
   function construirePanneau() {
@@ -454,7 +458,7 @@
 
     const preselections = $("preselections");
     preselections.replaceChildren();
-    const tous = { id: "tout", titre: "Tout", outils: endpointsDisponibles().map((e) => e.nom) };
+    const tous = { id: "tout", titre: "Tout", outils: endpointsParDefaut().map((e) => e.nom) };
     for (const p of [...catalogue.preselections, tous]) {
       const bouton = el("button", { type: "button", texte: p.titre, "data-preselection": p.id });
       bouton.addEventListener("click", () => {
@@ -466,7 +470,7 @@
     }
 
     const budget = $("budget");
-    const choixBudget = [5, 10, 20, 30, 50, 100].filter((n) => n <= catalogue.budget.plafond);
+    const choixBudget = [5, 10, 20, 30, 60, 100, 150, 200].filter((n) => n <= catalogue.budget.plafond);
     if (!choixBudget.includes(catalogue.budget.defaut)) choixBudget.push(catalogue.budget.defaut);
     budget.replaceChildren(...choixBudget.sort((a, b) => a - b).map((n) => el("option", { value: n, texte: `${n} crédits` })));
     budget.value = String(memoire.lire("veille.budget") || catalogue.budget.defaut);
@@ -480,14 +484,26 @@
     selectionModifiee();
   }
 
+  // Un endpoint Orcet coché (25 à 50 crédits par prévision) : budget relevé au-dessus de son coût, sinon il serait toujours refusé.
+  function ajusterBudget(choisis) {
+    const minimum = Math.max(0, ...choisis.filter((e) => e.opt_in).map((e) => e.cout + 10));
+    const budget = $("budget");
+    if (!minimum || Number(budget.value) >= minimum) return;
+    const option = [...budget.options].map((o) => Number(o.value)).sort((a, b) => a - b).find((n) => n >= minimum);
+    if (option) budget.value = String(option);
+  }
+
   function selectionModifiee() {
     memoire.ecrire(CLE_SELECTION, [...selection]);
     const choisis = [...selection].map(parNom).filter(Boolean);
-    const chers = choisis.filter((e) => e.cout >= 5).length;
+    ajusterBudget(choisis);
+    const chers = choisis.filter((e) => e.cout >= 5 && e.cout < 50).length;
+    const orcet = choisis.filter((e) => e.opt_in).length;
     $("resume-selection").textContent = `${choisis.length} endpoint${choisis.length > 1 ? "s" : ""} choisi${choisis.length > 1 ? "s" : ""}`
-      + (chers ? ` (dont ${chers} à 5 crédits)` : "") + ` · budget ${$("budget").value} crédits · ${$("max-appels").value} appels au plus`;
+      + (chers ? ` (dont ${chers} à 5 crédits)` : "") + (orcet ? ` · Orcet coché : ${Math.max(...choisis.filter((e) => e.opt_in).map((e) => e.cout))} crédits au plus par prévision` : "")
+      + ` · budget ${$("budget").value} crédits · ${$("max-appels").value} appels au plus`;
     document.querySelectorAll("#preselections button").forEach((b) => {
-      const p = [...catalogue.preselections, { id: "tout", outils: endpointsDisponibles().map((e) => e.nom) }].find((x) => x.id === b.dataset.preselection);
+      const p = [...catalogue.preselections, { id: "tout", outils: endpointsParDefaut().map((e) => e.nom) }].find((x) => x.id === b.dataset.preselection);
       const ensemble = new Set((p ? p.outils : []).filter((nom) => parNom(nom) && parNom(nom).disponible));
       b.classList.toggle("actif", ensemble.size === selection.size && [...ensemble].every((n) => selection.has(n)));
     });
@@ -505,14 +521,14 @@
     }
     const memorisee = memoire.lire(CLE_SELECTION);
     const valides = Array.isArray(memorisee) ? memorisee.filter((nom) => parNom(nom) && parNom(nom).disponible) : [];
-    // Par défaut : tous les endpoints disponibles sont cochés.
-    selection = new Set(valides.length ? valides : endpointsDisponibles().map((e) => e.nom));
+    // Par défaut : tous les endpoints disponibles sont cochés, sauf Orcet (opt-in).
+    selection = new Set(valides.length ? valides : endpointsParDefaut().map((e) => e.nom));
     construirePanneau();
     construireDirect();
   }
 
   // ---------- Affichage d'une réponse ----------
-  const SOURCE_EN_FIN = /\s*\(((?:scrutins?|textes?|amendements?|fiche|ordre du jour|dossiers?|recherche|agenda|lois?|registre|signaux|fil)\b[^()]*)\)\s*\.?\s*$/i;
+  const SOURCE_EN_FIN = /\s*\(((?:scrutins?|textes?|amendements?|fiche|ordre du jour|dossiers?|recherche|agenda|lois?|registre|signaux|fil|prévisions?)\b[^()]*)\)\s*\.?\s*$/i;
 
   function afficherLignes(donnees, idCarte) {
     const bloc = el("div", { classe: "reponse" });

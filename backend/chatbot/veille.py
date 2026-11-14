@@ -8,7 +8,7 @@ Trois familles :
 - ``local`` : un outil écrit dans ``serveur.py`` (``derniers_scrutins``, ``agenda_seances``) ;
 - ``jeu``   : un outil défini ici, qui lit UN jeu de données précis via l'outil MCP
   ``interroger`` avec des filtres fixés côté serveur (jamais un jeu au choix du modèle :
-  certains coûtent 50 crédits par ligne).
+  les jeux Orcet coûtent 25 crédits par ligne).
 
 Pour l'affichage, chaque appel est aussi traduit en requête REST équivalente
 (``GET /v1/scrutins/{id}``…), d'après la table des endpoints de docs/API_HEMICYCLE.md.
@@ -150,6 +150,9 @@ class SpecJeu:
     limite_max: int = 20
     lignes_lues: int | None = None  # lignes lues quand le résultat est regroupé (sinon : limite)
     periode_defaut_semaine: bool = False
+    # Sans période ni « passees » = true : depuis = aujourd'hui (prévisions à venir), tri croissant.
+    a_venir_par_defaut: bool = False
+    note: str | None = None  # rappel ajouté au résultat (« a_savoir »), lu par le modèle
     tronquer: dict[str, int] = field(default_factory=dict)
     renommer: dict[str, str] = field(default_factory=dict)
     source_ligne: Callable[[dict[str, Any]], dict[str, Any] | None] | None = None
@@ -261,6 +264,13 @@ def appel_interroger(spec: SpecJeu, arguments: dict[str, Any], aujourd_hui: date
             filtres.append({"colonne": param.colonne, "op": param.op, "valeur": texte})
     if spec.periode_defaut_semaine and depuis is None and jusqu_a is None:
         depuis, jusqu_a = semaine(aujourd_hui)
+    if spec.a_venir_par_defaut:
+        if arguments.get("passees") is True:
+            appel["ordre"] = "desc"
+            if jusqu_a is None and depuis is None:
+                jusqu_a = aujourd_hui - timedelta(days=1)
+        elif depuis is None and jusqu_a is None:
+            depuis = aujourd_hui
     if depuis and jusqu_a and jusqu_a < depuis:
         raise ErreurArgumentsVeille("« jusqu_a » doit être postérieure à « depuis ».")
     if spec.colonne_date:
@@ -331,6 +341,7 @@ def compacter_jeu(spec: SpecJeu, donnees: Any, contexte: dict[str, Any]) -> tupl
     contenu: dict[str, Any] = {
         "source": f"{editeur}" + (f" ({licence})" if licence else "") + ", via Hémicycle",
         "nombre": len(elements),
+        **({"a_savoir": spec.note} if spec.note else {}),
         **extra,
         "resultats": elements,
     }
@@ -402,6 +413,17 @@ def nom_de_famille(valeur: Any) -> str:
     utiles = [m for m in mots if m.lower() not in PARTICULES]
     dernier = utiles[-1] if utiles else mots[-1]
     return dernier if len(dernier) >= 3 else texte
+
+
+URL_ORCET = "https://hemicycle.ai/modeles/orcet"
+
+
+def _source_orcet(l: dict[str, Any]) -> dict[str, Any] | None:
+    """Une prévision d'Orcet : citée « (prévision d'Orcet du JJ/MM/AAAA) » dans la réponse."""
+    quand = date_fr(l.get("mis_a_jour_le") or l.get("cree_le") or "")
+    sujet = l.get("texte_court") or str(l.get("texte_titre") or "")[:90] or "vote à venir"
+    return {"url": URL_ORCET, "ref": l.get("scrutin_uid") or l.get("id"), "nature": "prevision_orcet",
+            "editeur": "Hémicycle (Orcet)", "libelle": f"Prévision d'Orcet du {quand} — {sujet}"}
 
 
 def _source_url_ligne(libelle: Callable[[dict[str, Any]], str], nature: str, ref: str = "id") -> Callable:
@@ -667,6 +689,35 @@ SPECS_JEUX: dict[str, SpecJeu] = {
         ),
         limite_defaut=5, tronquer={"extraits": 300, "titre": 220},
     ),
+    "previsions_orcet": SpecJeu(
+        jeu="orcet_previsions_votes",
+        colonnes=("id", "scrutin_uid", "texte_titre", "texte_court", "type", "date_prevue", "dossier", "moyenne_probabilites_pour_pct", "nb_deputes_probabilite_sup_0_6",
+                  "nb_deputes_probabilite_inf_0_4", "nb_deputes_probabilite_entre_0_4_et_0_6", "confiance_modele",
+                  "groupes_positions", "deputes_a_surveiller", "facteurs_cles", "statut", "resultat_pour",
+                  "resultat_contre", "resultat_abstention", "resultat_adopte", "version_modele", "mis_a_jour_le"),
+        params=(
+            _p_contient("texte", "texte_titre", "Mots du titre du texte (3 lettres au moins), ex. « finances »."),
+            ParamJeu("passees", {"type": "boolean", "description": "true : prévisions de votes déjà passés, avec le "
+                                 "résultat constaté (Orcet face au réel). Défaut : votes à venir."}, role="booleen"),
+            _p_depuis("Date prévue du vote, minimale (AAAA-MM-JJ). Défaut : aujourd'hui."),
+            _p_jusqu_a("Date prévue du vote, maximale (AAAA-MM-JJ)."),
+            _p_limite(1, 3, "prévisions (25 crédits chacune)"),
+        ),
+        tri="date_prevue", ordre="asc", colonne_date="date_prevue", a_venir_par_defaut=True,
+        limite_defaut=1, limite_max=3,
+        tronquer={"texte_titre": 220, "facteurs_cles": 400},
+        renommer={
+            "moyenne_probabilites_pour_pct": "moyenne_probabilites_individuelles_pour_pct",
+            "nb_deputes_probabilite_sup_0_6": "nb_deputes_probabilite_pour_sup_60pct",
+            "nb_deputes_probabilite_inf_0_4": "nb_deputes_probabilite_pour_inf_40pct",
+            "nb_deputes_probabilite_entre_0_4_et_0_6": "nb_deputes_incertains_40_a_60pct",
+        },
+        source_ligne=_source_orcet,
+        note=("Prévision d'Orcet, le modèle d'Hémicycle (statut : aperçu) : « moyenne_probabilites_individuelles_pour_pct » "
+              "est la moyenne des probabilités individuelles des députés de voter pour, PAS la probabilité que le "
+              "texte soit adopté. Les nombres de députés comptent des probabilités, pas des votes prévus. Présenter "
+              "comme une estimation datée (mis_a_jour_le), avec la confiance du modèle ; jamais comme un résultat."),
+    ),
     "lobbying_hatvp": SpecJeu(
         jeu="representants_interets",
         colonnes=("denomination", "categorie", "secteurs", "domaines", "dirigeants", "depenses_tranche", "nb_salaries",
@@ -692,6 +743,10 @@ CATEGORIES: list[dict[str, str]] = [
     {"id": "senat", "titre": "Sénat et navette", "aide": "État d'un texte au Sénat, scrutins, agenda, amendements."},
     {"id": "signaux", "titre": "Signaux et fil d'Hémicycle", "aide": "Données calculées par Hémicycle (5 crédits)."},
     {"id": "contexte", "titre": "Contexte", "aide": "Lois en vigueur, lobbying, données publiques."},
+    {"id": "previsions", "titre": "Prévisions d'Orcet (25 à 50 crédits)",
+     "aide": "Modèle d'Hémicycle (aperçu) : moyenne des probabilités individuelles des députés de voter pour, pas "
+             "une probabilité d'adoption. Décochés par défaut. Constaté le 14/11/2026 : aucune prévision de vote "
+             "à venir (la plus récente porte sur un vote du 27/06/2026) ; rien n'est facturé sans prévision."},
 ]
 
 
@@ -706,6 +761,7 @@ class Endpoint:
     description: str | None = None  # description pour le modèle (sinon : celle du serveur MCP)
     exemple: dict[str, Any] = field(default_factory=dict)
     aide: str = ""  # pour le journaliste (sinon : description)
+    opt_in: bool = False  # décoché par défaut et hors du bouton « Tout » (endpoints coûteux : Orcet)
 
     @property
     def outil_mcp(self) -> str:
@@ -859,14 +915,38 @@ ENDPOINTS: list[Endpoint] = [
     Endpoint("lire_donnees_publiques", "Lire un fichier data.gouv.fr", "contexte", "mcp", 2,
              "Lire un fichier trouvé par chercher_donnees_publiques : lire_donnees_publiques (identifiant du fichier).",
              exemple={"fichier": "<identifiant renvoyé par chercher_donnees_publiques>", "lignes": 20}),
+    # --- Prévisions (Orcet : 25 crédits par prévision du jeu, 50 au plus pour predire_vote) ---
+    Endpoint("previsions_orcet", "Prévisions de votes (Orcet)", "previsions", "jeu", 25,
+             "Vote à venir, « ce texte va-t-il passer ? », prévision : previsions_orcet (25 crédits par prévision ; "
+             "texte = mots du titre ; limite = 1 sauf demande ; passees = true pour comparer prévision et résultat). "
+             "Le chiffre est la moyenne des probabilités individuelles des députés de voter pour, PAS une "
+             "probabilité d'adoption : écris « selon Orcet, le modèle d'Hémicycle, les députés voteraient pour à X % "
+             "en moyenne (estimation du JJ/MM/AAAA, confiance …) », jamais « X % de chances d'être adopté ». "
+             "Ne l'appelle que pour une question sur un vote à venir ou une prévision. Sans prévision (aucun "
+             "résultat) : écris « Orcet, le modèle d'Hémicycle, n'a pas de prévision pour ce vote » et réponds avec "
+             "l'état du texte donné par les autres outils.",
+             description="Prévisions d'Orcet, le modèle d'Hémicycle, sur les votes à venir de l'Assemblée (17e "
+                         "législature) : texte, date prévue, moyenne des probabilités individuelles des députés de voter "
+                         "pour (pas une probabilité d'adoption), confiance, positions prévues des groupes, députés à "
+                         "surveiller, facteurs clés ; avec passees = true, le résultat constaté. 25 crédits par "
+                         "prévision renvoyée (rien si aucune).",
+             exemple={"texte": "finances", "limite": 1}, opt_in=True),
+    Endpoint("predire_vote", "Prévision sur un amendement (Orcet)", "previsions", "mcp", 50,
+             "Prévision d'Orcet sur UN amendement précis (identifiant AMANR5… donné par amendements_deposes ou "
+             "lire_amendement) : predire_vote (50 crédits ; rien si aucune prévision). Même lecture : moyenne des "
+             "probabilités individuelles de voter pour, pas une probabilité d'adoption ; estimation datée, avec "
+             "la confiance.",
+             description="Dernière prévision d'Orcet, le modèle d'Hémicycle, sur un amendement de l'Assemblée : "
+                         "moyenne des probabilités individuelles des députés de voter pour (pas la probabilité "
+                         "d'adoption), confiance et date de la prévision. 50 crédits, rien si aucune prévision n'existe.",
+             exemple={"amendement": "AMANR5L17PO838901BTC3188P0D1N001090"}, opt_in=True),
 ]
 PAR_NOM: dict[str, Endpoint] = {e.nom: e for e in ENDPOINTS}
 
 # Outils d'Hémicycle volontairement non proposés (affichés avec la raison dans l'outil).
 NON_PROPOSES: list[dict[str, Any]] = [
-    {"nom": "predire_vote", "cout": 50, "raison": "Prédiction d'un modèle (Orcet), pas une donnée publique ; 50 crédits."},
-    {"nom": "interroger", "cout": 1, "raison": "Accès brut aux 132 jeux, dont les prédictions Orcet à 50 crédits par ligne : "
-                                              "remplacé par les endpoints ciblés ci-dessus."},
+    {"nom": "interroger", "cout": 1, "raison": "Accès brut aux 132 jeux (dont les jeux Orcet à 25 crédits par ligne, sans "
+                                              "plafond) : remplacé par les endpoints ciblés ci-dessus."},
     {"nom": "chercher_entreprise", "cout": 2, "raison": "Hors du périmètre de la veille parlementaire."},
     {"nom": "guide", "cout": 0, "raison": "Documentation d'Hémicycle, inutile pour répondre."},
     {"nom": "lister_jeux", "cout": 0, "raison": "Catalogue technique des jeux de données."},
@@ -893,6 +973,9 @@ PRESELECTIONS: list[dict[str, Any]] = [
     {"id": "signaux", "titre": "Signaux et contexte", "outils": [
         "fil_evenements", "signaux_faibles", "derniers_scrutins", "rechercher", "lobbying_hatvp", "lois_publiees",
         "chercher_donnees_publiques", "lire_donnees_publiques"]},
+    {"id": "previsions", "titre": "Prévisions (Orcet)", "outils": [
+        "derniers_scrutins", "agenda_seances", "rechercher", "amendements_deposes", "lire_amendement",
+        "previsions_orcet", "predire_vote"]},
 ]
 
 
@@ -914,6 +997,20 @@ def definition(endpoint: Endpoint, definitions_locales: dict[str, dict[str, Any]
             "parameters": schema_serveur.get("parameters") or {"type": "object", "properties": {}},
         },
     }
+
+
+def cout_appel(nom: str, arguments: dict[str, Any] | None = None) -> int:
+    """Crédits maximaux d'un appel : le coût unitaire, multiplié par la limite pour les prévisions d'Orcet
+    (25 crédits par prévision renvoyée, tarif du 14/11/2026)."""
+    endpoint = PAR_NOM[nom]
+    if nom == "previsions_orcet":
+        spec = SPECS_JEUX[nom]
+        try:
+            limite = int((arguments or {}).get("limite") or spec.limite_defaut)
+        except (TypeError, ValueError):
+            limite = spec.limite_defaut
+        return endpoint.cout * min(spec.limite_max, max(1, limite))
+    return endpoint.cout
 
 
 def remplacer_jours(valeur: Any, aujourd_hui: date) -> Any:
@@ -961,6 +1058,8 @@ def nomme_le_depute(source: dict[str, Any], texte: str) -> bool:
 def _cite(source: dict[str, Any], ligne: str) -> bool:
     if source.get("nature") == "agenda":
         return "ordre du jour" in ligne.lower()
+    if source.get("nature") == "prevision_orcet":
+        return "orcet" in ligne.lower()
     ref = source.get("ref")
     if ref and str(ref) in ligne:
         return True

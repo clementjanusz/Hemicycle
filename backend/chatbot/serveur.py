@@ -78,6 +78,7 @@ from veille import (
     appel_interroger,
     attribuer_lignes,
     compacter_jeu,
+    cout_appel,
     definition as definition_endpoint,
     nom_de_famille,
     nomme_le_depute,
@@ -107,11 +108,12 @@ FUSEAU = ZoneInfo("Europe/Paris")
 
 # Les endpoints proposés (outils MCP, outils locaux et jeux de données ciblés), leurs descriptions
 # et la sélection par défaut sont définis dans veille.py. `interroger` n'est jamais exposé tel
-# quel au modèle : 132 jeux, dont les prédictions Orcet à 50 crédits pièce.
+# quel au modèle : 132 jeux, dont les prédictions Orcet à 25 crédits pièce (tarif du 14/11/2026).
 
-# Seuls jeux que les outils locaux peuvent interroger (garde-fou contre Orcet et les jeux dérivés) :
+# Seuls jeux que les outils locaux peuvent interroger (garde-fou contre les jeux non prévus) :
 # ceux des endpoints « jeu » de veille.py, variantes comprises (`deputes` pour chercher_depute
-# avec anciens = true).
+# avec anciens = true). Seul jeu Orcet : `orcet_previsions_votes`, par l'endpoint previsions_orcet
+# (3 prévisions au plus par appel, 25 crédits chacune, coût vérifié contre le budget avant l'appel).
 JEUX_AUTORISES = frozenset({"scrutins", "reunions", *(jeu for spec in SPECS_JEUX.values() for jeu in spec.jeux)})
 LEGISLATURE = 17
 EDITEUR_AN = "Assemblée nationale"
@@ -304,9 +306,9 @@ def charger_parametres() -> Parametres:
         max_tokens=_entier_env("CHATBOT_MAX_TOKENS", 1800, 100),
         temperature=0.3,
         max_credits_question=_entier_env("CHATBOT_MAX_CREDITS_QUESTION", 10, 1),
-        max_credits_plafond=_entier_env("CHATBOT_MAX_CREDITS_QUESTION_PLAFOND", 30, 1),
+        max_credits_plafond=_entier_env("CHATBOT_MAX_CREDITS_QUESTION_PLAFOND", 200, 1),
         max_appels_plafond=_entier_env("CHATBOT_MAX_TOOL_CALLS_PLAFOND", 8, 1),
-        max_credits_serveur=_entier_env("CHATBOT_MAX_CREDITS_SERVEUR", 300, 0),
+        max_credits_serveur=_entier_env("CHATBOT_MAX_CREDITS_SERVEUR", 1000, 0),
         cache_s=_entier_env("CHATBOT_CACHE_S", 600, 0),
         concurrence_llm=_entier_env("CHATBOT_CONCURRENCE_LLM", 1, 1),
         trace=os.environ.get("CHATBOT_TRACE", "").strip() or None,
@@ -350,7 +352,7 @@ Méthode, pour CHAQUE question :
 {consignes_outils(selection, aujourd_hui)}
 2. Approfondis avant de répondre : une liste ou une recherche ne suffit pas. Pour les deux ou trois faits les plus importants trouvés, appelle les outils de détail disponibles parmi ceux ci-dessus (contenu et étapes du texte ou du dossier, décompte et positions des groupes d'un scrutin, suite au Sénat, ordre du jour à venir), tant qu'il te reste des appels.
 3. Puis réponds UNIQUEMENT avec ce que contiennent les résultats des outils. Tu ne sais rien du Parlement par toi-même : chaque fait (date, nom, chiffre, résultat, intitulé, étape) doit figurer dans un résultat d'outil de cette conversation. N'utilise jamais tes connaissances propres, même pour compléter, contextualiser ou corriger.
-4. Si, après les appels d'outils, les résultats ne contiennent pas l'information demandée, réponds seulement : « {MESSAGE_INTROUVABLE} »
+4. Si les résultats ne contiennent RIEN sur le sujet de la question, réponds seulement : « {MESSAGE_INTROUVABLE} ». S'ils n'y répondent qu'en partie (pas de prévision, pas encore de vote…), dis en une phrase ce qui manque, puis donne ce que les résultats disent du sujet (étape du texte, votes déjà intervenus, prochaine séance).
 
 Identifiants : scrutin VTANR5L17V<numéro> (VTANR5L17V1234 = scrutin n° 1234) ; député PA<chiffres> ; texte PRJLANR5L17B<numéro> (projet de loi) ou PIONANR5L17B<numéro> (proposition de loi) ; dossier DLR5L17N<chiffres> ; amendement AMANR5L17….
 
@@ -377,7 +379,8 @@ Règles de forme :
 - Adapte la longueur à la question. Question précise (un vote, un député, une date) : « En bref » puis 1 à 3 puces, sans titre de section. Question large (la semaine, un texte, un thème) : 2 à 4 sections, 10 puces au plus en tout, 300 mots au plus.
 - Une puce = un fait, 25 mots au plus, qui commence en gras par la date et le sort ou l'étape : « **12/11/2026 · Rejeté** », « **15/09/2026 · Déposée** », « **10/11/2026 · En séance** ». Vote : « rejeté (25 pour, 49 contre) », abstentions seulement si elles ne sont pas nulles. Auteur et groupe si les résultats les donnent.
 - Aucun code dans les phrases : jamais d'identifiant (DLR…, PRJL…, PION…, PA…, VTANR…, AMANR…, PO…), ni « texte n° », « dossier », numéro d'amendement ou d'article, sauf si la question les demande. Les numéros vont seulement dans la source finale.
-- Termine chaque puce par UNE seule source entre parenthèses, la plus précise : « (scrutin n° 1234) », « (texte n° 567) », « (amendement n° 89) », « (scrutin du Sénat n° 99) », « (fiche du député) » ou « (ordre du jour du JJ/MM/AAAA) ». Pas de source dans « En bref » ni dans les titres.
+- Termine chaque puce par UNE seule source entre parenthèses, la plus précise : « (scrutin n° 1234) », « (texte n° 567) », « (amendement n° 89) », « (scrutin du Sénat n° 99) », « (fiche du député) », « (ordre du jour du JJ/MM/AAAA) » ou « (prévision d'Orcet du JJ/MM/AAAA) ». Pas de source dans « En bref » ni dans les titres.
+- Une prévision d'Orcet n'est jamais un résultat : elle va dans « À suivre », avec sa date et la confiance du modèle, formulée comme une moyenne des probabilités individuelles de voter pour (jamais « chances d'adoption »).
 - Intitulés : l'intitulé exact à la première mention, ensuite une désignation courte tirée de cet intitulé (« la proposition de loi sur les incendies volontaires »). Sigles admis : PLF, PLFSS, CMP et les sigles de groupes donnés par les résultats.
 - « Chiffres clés » (1 à 3 puces, question large seulement) : des décomptes ou comparaisons que l'on peut refaire avec les chiffres des résultats, chiffres à l'appui (« 3 propositions de loi déposées depuis le 23/07/2026 », « 49 voix contre, 25 pour »). N'écris « unanimité », « large » ou « serré » que si les chiffres le montrent (unanimité = 0 voix dans un des camps). Jamais un zéro ni une absence (« 0 scrutin… ») dans les chiffres clés. Aucune cause, aucune interprétation, aucun pronostic.
 - Cohérence : compte les éléments de ta propre liste avant d'écrire un total ; un même nombre partout (« En bref », puces, chiffres clés).
@@ -1053,7 +1056,7 @@ async def _executer_local(etat: EtatServeur, nom: str, arguments: dict[str, Any]
             appel, depuis, jusqu_a = arguments_agenda(arguments, aujourd_hui)
     except ErreurArguments as erreur:
         return _refus(nom, f"Erreur : {erreur}", compteur, tool_call_id, arguments)
-    if appel["jeu"] not in JEUX_AUTORISES:  # garde-fou : jamais Orcet ni jeu dérivé
+    if appel["jeu"] not in JEUX_AUTORISES:  # garde-fou : jamais un jeu non prévu
         return _refus(nom, "Erreur : jeu non autorisé.", compteur, tool_call_id, arguments)
 
     resultat = await etat.hemicycle.appeler("interroger", appel, compteur, tool_call_id=tool_call_id)
@@ -1090,7 +1093,7 @@ async def _executer_jeu(etat: EtatServeur, nom: str, arguments: dict[str, Any],
         appel, contexte = appel_interroger(spec, arguments, datetime.now(FUSEAU).date())
     except ErreurArgumentsVeille as erreur:
         return _refus(nom, f"Erreur : {erreur}", compteur, tool_call_id, arguments)
-    if appel["jeu"] not in JEUX_AUTORISES:  # garde-fou : jamais Orcet ni un jeu non prévu
+    if appel["jeu"] not in JEUX_AUTORISES:  # garde-fou : jamais un jeu non prévu
         return _refus(nom, "Erreur : jeu non autorisé.", compteur, tool_call_id, arguments)
     resultat = await etat.hemicycle.appeler("interroger", appel, compteur, tool_call_id=tool_call_id)
     resultat.outil, resultat.arguments = nom, dict(arguments)
@@ -1112,9 +1115,9 @@ async def _executer_jeu(etat: EtatServeur, nom: str, arguments: dict[str, Any],
     return resultat
 
 
-def cout_estime(nom: str) -> int:
-    endpoint = PAR_NOM.get(nom)
-    return endpoint.cout if endpoint else COUTS_CREDITS.get(nom, COUT_INCONNU)
+def cout_estime(nom: str, arguments: dict[str, Any] | None = None) -> int:
+    """Crédits maximaux d'un appel (prévisions d'Orcet : 50 × limite)."""
+    return cout_appel(nom, arguments) if nom in PAR_NOM else COUTS_CREDITS.get(nom, COUT_INCONNU)
 
 
 async def executer_appel(etat: EtatServeur, tool_call: Any, compteur: CompteurConversation,
@@ -1155,7 +1158,7 @@ async def executer_appel(etat: EtatServeur, tool_call: Any, compteur: CompteurCo
         return resultat, True
 
     # Plafonds de crédits (par question, et depuis le démarrage du serveur).
-    cout = cout_estime(nom)
+    cout = cout_estime(nom, arguments)
     deja = max(compteur.credits_estimes, compteur.credits_factures)
     budget = max_credits or etat.parametres.max_credits_question
     if not compteur.limite_atteinte:
@@ -1807,6 +1810,7 @@ async def catalogue(request: Request) -> dict[str, Any]:
             "disponible": definition is not None,
             "raison": etat.indisponibles.get(e.nom),
             "par_defaut": e.nom in SELECTION_DEFAUT,
+            "opt_in": e.opt_in,
         })
     return {
         "categories": CATEGORIES,

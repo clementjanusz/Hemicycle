@@ -116,7 +116,7 @@ class TestChercherDepute(unittest.TestCase):
 
     def test_garde_fou_et_selection(self):
         self.assertTrue({"deputes", "deputes_en_exercice"} <= serveur.JEUX_AUTORISES)
-        self.assertFalse(any("orcet" in jeu for jeu in serveur.JEUX_AUTORISES))
+        self.assertEqual({jeu for jeu in serveur.JEUX_AUTORISES if "orcet" in jeu}, {"orcet_previsions_votes"})
         self.assertIn("chercher_depute", SELECTION_DEFAUT)
         self.assertIn("lire_acteur", SELECTION_DEFAUT)
         for preselection in PRESELECTIONS:

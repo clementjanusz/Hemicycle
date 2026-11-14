@@ -48,11 +48,23 @@ class Catalogue(unittest.TestCase):
             for nom in preselection["outils"]:
                 self.assertIn(nom, PAR_NOM, preselection["id"])
 
-    def test_jamais_orcet(self):
-        for spec in SPECS_JEUX.values():
-            self.assertFalse(spec.jeu.startswith("orcet"), spec.jeu)
-        self.assertNotIn("predire_vote", PAR_NOM)
+    def test_orcet_limite_et_opt_in(self):
+        """Seul jeu Orcet : orcet_previsions_votes, par previsions_orcet (3 prévisions au plus) ; hors sélection par défaut."""
+        jeux_orcet = {jeu for spec in SPECS_JEUX.values() for jeu in spec.jeux if jeu.startswith("orcet")}
+        self.assertEqual(jeux_orcet, {"orcet_previsions_votes"})
+        self.assertLessEqual(SPECS_JEUX["previsions_orcet"].limite_max, 3)
         self.assertNotIn("interroger", PAR_NOM)
+        for nom in ("previsions_orcet", "predire_vote"):
+            self.assertTrue(PAR_NOM[nom].opt_in, nom)
+            self.assertNotIn(nom, SELECTION_DEFAUT)
+        self.assertEqual({e.nom for e in ENDPOINTS if e.opt_in}, {"previsions_orcet", "predire_vote"})
+
+    def test_cout_orcet_selon_limite(self):
+        self.assertEqual(veille.cout_appel("previsions_orcet", {}), 25)
+        self.assertEqual(veille.cout_appel("previsions_orcet", {"limite": 2}), 50)
+        self.assertEqual(veille.cout_appel("previsions_orcet", {"limite": 99}), 75)
+        self.assertEqual(veille.cout_appel("predire_vote", {"amendement": "AMANR5…"}), 50)
+        self.assertEqual(veille.cout_appel("derniers_scrutins", {}), 1)
 
     def test_exemples_valides(self):
         """Chaque exemple d'endpoint « jeu » produit un appel `interroger` sans erreur."""
@@ -118,6 +130,18 @@ class ArgumentsJeu(unittest.TestCase):
         appel, _ = appel_interroger(SPECS_JEUX["senat_agenda"], {"commissions": True}, AUJOURD_HUI)
         self.assertNotIn({"colonne": "type_reunion", "op": "eq", "valeur": "seance"}, appel["filtres"])
 
+    def test_orcet_a_venir_ou_passees(self):
+        spec = SPECS_JEUX["previsions_orcet"]
+        appel, contexte = appel_interroger(spec, {"texte": "finances"}, AUJOURD_HUI)
+        self.assertEqual(appel["jeu"], "orcet_previsions_votes")
+        self.assertEqual((appel["tri"], appel["ordre"], appel["limite"]), ("date_prevue", "asc", 1))
+        self.assertIn({"colonne": "date_prevue", "op": "gte", "valeur": "2026-11-14"}, appel["filtres"])
+        self.assertIn({"colonne": "texte_titre", "op": "like", "valeur": "finances"}, appel["filtres"])
+        appel, _ = appel_interroger(spec, {"passees": True, "limite": 2}, AUJOURD_HUI)
+        self.assertEqual((appel["ordre"], appel["limite"]), ("desc", 2))
+        self.assertIn({"colonne": "date_prevue", "op": "lt", "valeur": "2026-11-14"}, appel["filtres"])
+        self.assertFalse(any(f["op"] == "gte" for f in appel["filtres"]))
+
     def test_nature_des_documents(self):
         appel, _ = appel_interroger(SPECS_JEUX["textes_deposes"], {"nature": "proposition de loi"}, AUJOURD_HUI)
         self.assertIn({"colonne": "type_libelle", "op": "like", "valeur": "Proposition de loi"}, appel["filtres"])
@@ -163,6 +187,22 @@ class Compaction(unittest.TestCase):
         self.assertEqual(contenu["resultats"][2]["par_auteur"], {"SOC": 4, "RN": 2})
         self.assertEqual(contenu["totaux_par_jour"]["12/11/2026"]["amendements"], 6)
         self.assertEqual(sources[0]["url"], "https://www.assemblee-nationale.fr/dyn/17/scrutins/9895")
+
+
+class Orcet(unittest.TestCase):
+    def test_compaction_et_citation(self):
+        donnees = {"source": {"nom": "Hémicycle", "licence": "Tous usages, avec mention de la source « Hémicycle »"},
+                   "lignes": [{"id": 7, "scrutin_uid": "VTANR5L17V9999", "texte_court": "PLF 2027",
+                               "moyenne_probabilites_pour_pct": 46.2, "confiance_modele": 0.7,
+                               "mis_a_jour_le": "2026-11-13T05:00:00Z"}]}
+        contenu, sources = compacter_jeu(SPECS_JEUX["previsions_orcet"], donnees, {"limite": 1, "jeu": "orcet_previsions_votes"})
+        self.assertIn("PAS la probabilité", contenu["a_savoir"])
+        self.assertEqual(contenu["resultats"][0]["moyenne_probabilites_individuelles_pour_pct"], 46.2)
+        self.assertEqual(sources[0]["nature"], "prevision_orcet")
+        self.assertIn("13/11/2026", sources[0]["libelle"])
+        lignes = attribuer_lignes("- **À suivre** : selon Orcet, 46,2 % en moyenne (prévision d'Orcet du 13/11/2026)",
+                                  [(0, json.dumps(contenu, ensure_ascii=False), sources)])
+        self.assertEqual(lignes[0]["appels"], [0])
 
 
 class Attribution(unittest.TestCase):
