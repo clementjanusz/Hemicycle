@@ -1,0 +1,46 @@
+# --- Secrets ---
+.env
+.env.*
+!.env.example
+
+# --- Données ---
+data/raw/*
+!data/raw/.gitkeep
+*.sqlite
+*.db
+.cache/
+
+# --- Node / front-end ---
+node_modules/
+dist/
+build/
+.next/
+.nuxt/
+.svelte-kit/
+.astro/
+.vercel/
+.netlify/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Python / back-end ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+*.egg-info/
+
+# --- Éditeurs / OS ---
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
