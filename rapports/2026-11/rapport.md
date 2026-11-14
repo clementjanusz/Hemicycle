@@ -2,13 +2,15 @@
 mois: 2026-11
 titre: "Après les flammes"
 chapo: "Aides d’urgence, prévention, soutien aux pompiers. Suivez les mesures prises après les incendies de l’été 2026, des premiers secours aux votes de l’Assemblée."
-auteurs: []
+auteurs: ["Chapô"]
 publie_le: 2026-11-14
 ---
 
 # Après les flammes
 
-_Le dossier · 14 novembre 2026._ Aides d’urgence, prévention, soutien aux pompiers. Suivez les mesures prises après les incendies de l’été 2026, des premiers secours aux votes de l’Assemblée.
+_Chapô · Le dossier · 14 novembre 2026._ Aides d’urgence, prévention, soutien aux pompiers. Suivez les mesures prises après les incendies de l’été 2026, des premiers secours aux votes de l’Assemblée.
+
+Le récit suit trois volets : 01 · Réparer, 02 · Prévenir, 03 · Secourir. Il commence par la carte des feux et se termine par la suite au Parlement, l’explorateur des cinq scrutins et les données ouvertes.
 
 État du dossier au 14 novembre 2026.
 
@@ -42,27 +44,36 @@ Ce que la carte indique pour chaque département en rouge (bilan provisoire du C
 
 Sources : [Bilan provisoire du CNPF](https://www.cnpf.fr/actualites/feux-de-foret-un-ete-2026-hors-norme-le-cnpf-pleinement-mobilise) · [Bilan de Saumos](https://www.gironde.gouv.fr/layout/set/print/Actualites/Communiques-de-presse/Communiques-de-presse-2026/Septembre-2026/Le-feu-de-Saumos-est-desormais-eteint) (préfecture de la Gironde).
 
-## L’aide est arrivée par décret {#aides}
+## Après le feu, soutenir les sinistrés {#aides}
 
-_Août–septembre · Aides publiées_
+_01 · Réparer · Aides publiées_
 
 Le décret du 14 août ouvre une aide exceptionnelle d’activité partielle aux entreprises de moins de 250 salariés éligibles, touchées par des mesures d’évacuation ou de confinement. Le décret du 17 septembre prolonge la période couverte jusqu’au 4 octobre, selon les communes listées en annexe.
 
 Dès le 31 juillet, un arrêté reconnaît les feux de Saumos et de Biscarrosse comme sinistre de grande ampleur. Le 25 septembre, le Gouvernement indique que les premiers acomptes d’indemnisation des assureurs ont été versés en Gironde et dans les Landes.
 
-**4 octobre** : dernier jour de la période couverte. Le décret de septembre prolonge l’aide exceptionnelle d’activité partielle pour les entreprises éligibles (source : décret du 17 septembre 2026, Légifrance).
+Fiche visuelle « Réparer · le calendrier des aides » : des réponses à plusieurs étapes.
+
+- 31 juillet : reconnaissance du sinistre de grande ampleur.
+- 14 août : ouverture de l’aide exceptionnelle d’activité partielle.
+- 17 septembre : prolongation par décret.
+- 4 octobre : fin de la période couverte pour les entreprises éligibles.
+
+Arrêté et décrets cités dans le récit ; conditions communales à vérifier dans les annexes.
 
 Sources : [Décret et communes concernées](https://www.legifrance.gouv.fr/jorf/id/JORFTEXT000054860173) (décret du 17 septembre 2026, Légifrance) · [Arrêté sur les forêts touchées](https://www.legifrance.gouv.fr/loda/id/JORFTEXT000054618751) (arrêté du 31 juillet 2026, Légifrance) · [Point du Gouvernement](https://www.info.gouv.fr/public/index.php/communique/incendies-en-gironde-et-dans-les-landes-l-etat-accelere-la-reconstruction) (25 septembre 2026).
 
 ## Un crédit d’impôt pour débroussailler {#prevenir}
 
-_15 octobre · Prévention_
+_02 · Prévenir · 15 octobre_
 
-L’amendement de Sophie Pantel prévoit de couvrir **50 % des dépenses éligibles** de débroussaillement, dans la limite de 5 000 € de dépenses par foyer fiscal et par an.
+Préparer le prochain été passe aussi par le débroussaillement. L’amendement de Sophie Pantel prévoit de couvrir **50 % des dépenses éligibles** de débroussaillement, dans la limite de 5 000 € de dépenses par foyer fiscal et par an.
 
 L’Assemblée l’a adopté en première lecture avec 53 voix pour, 14 contre et 40 abstentions. L’entrée en vigueur du crédit reste à établir au 14 novembre.
 
-Le vote : scrutin n° 8775 du 15 octobre 2026, sur l’amendement I-3339 de Sophie Pantel et l’amendement identique suivant, après l’article 3 du projet de loi de finances pour 2027 (première lecture). 107 votants : 53 pour, 14 contre, 40 abstentions.
+Le vote : scrutin n° 8775 du 15 octobre 2026, sur l’amendement I-3339 de Sophie Pantel et l’amendement identique suivant, après l’article 3 du projet de loi de finances pour 2027 (première lecture). 107 votants : 53 pour, 14 contre, 40 abstentions ; 1 non-votant de droit.
+
+Fiche visuelle « Prévenir · proposition fiscale » : la moitié des dépenses éligibles (50 % de crédit proposé, 50 % de reste des dépenses). Pour 5 000 € de dépenses éligibles : jusqu’à **2 500 € de crédit proposé**. Plafond annuel par foyer fiscal. Illustration du dispositif voté en première lecture, dont l’entrée en vigueur reste à établir.
 
 Sources : [Amendement I-3339](https://www.assemblee-nationale.fr/dyn/17/amendements/3210A/AN/3339) · [Scrutin n° 8775](https://www.assemblee-nationale.fr/dyn/17/scrutins/8775) (Assemblée nationale).
 
@@ -79,17 +90,21 @@ Les votes, le 20 octobre 2026, en première lecture du projet de loi de financem
 - Article 4 dans son ensemble : scrutin n° 8905, 159 pour, 9 contre, 3 abstentions (171 votants).
 - Amendement n° 39 d’Arnaud Simion à l’article 4 : scrutin n° 8904, 72 pour, 33 contre, 74 abstentions (179 votants).
 
+Fiche visuelle « Réparer · cotisations et volontariat » : un article largement adopté, 159 pour sur 171 votants. Vote sur l’ensemble de l’article 4 : il couvre aussi Mayotte et le volontariat, au-delà des incendies.
+
 Sources : [Scrutin n° 8905](https://www.assemblee-nationale.fr/dyn/17/scrutins/8905) · [Scrutin n° 8904](https://www.assemblee-nationale.fr/dyn/17/scrutins/8904) (Assemblée nationale).
 
 ## Alléger la facture des services d’incendie {#pompiers}
 
-_21 octobre · Services de secours_
+_03 · Secourir · 21 octobre_
 
-L’amendement de Sophie Panonacle vise à réduire temporairement en 2027 les cotisations patronales de retraite dues par les services d’incendie et de secours pour leurs pompiers professionnels. Les droits à pension resteraient identiques.
+Les moyens humains et financiers des secours forment un autre volet du dossier. L’amendement de Sophie Panonacle vise à réduire temporairement en 2027 les cotisations patronales de retraite dues par les services d’incendie et de secours pour leurs pompiers professionnels. Les droits à pension resteraient identiques.
 
 En première lecture, 62 députés ont voté pour, 10 contre et 46 se sont abstenus.
 
-Le vote : scrutin n° 8924 du 21 octobre 2026, sur l’amendement n° 306 rectifié de Sophie Panonacle après l’article 4 du projet de loi de financement de la sécurité sociale pour 2027 (première lecture). 118 votants : 62 pour, 10 contre, 46 abstentions.
+Le vote : scrutin n° 8924 du 21 octobre 2026, sur l’amendement n° 306 rectifié de Sophie Panonacle après l’article 4 du projet de loi de financement de la sécurité sociale pour 2027 (première lecture). 118 votants : 62 pour, 10 contre, 46 abstentions ; 1 non-votant de droit.
+
+Fiche visuelle « Secourir · moyens des pompiers » : chaque point est une voix (62 pour, 10 contre, 46 abstentions). Une réduction temporaire des cotisations patronales de retraite est proposée pour 2027, sans modifier les droits à pension.
 
 Sources : [Amendement n° 306 rectifié](https://www.assemblee-nationale.fr/dyn/17/amendements/3211/AN/306) · [Scrutin n° 8924](https://www.assemblee-nationale.fr/dyn/17/scrutins/8924) (Assemblée nationale).
 
@@ -99,9 +114,16 @@ _23 octobre–14 novembre · La suite au Parlement_
 
 Le 23 octobre, l’Assemblée rejette la partie recettes du budget de la Sécurité sociale. Ce vote entraîne le rejet de l’ensemble du projet à l’Assemblée. Au 14 novembre, le Sénat poursuit l’examen.
 
-Les aides d’urgence publiées par décret suivent leur propre calendrier. Les mesures budgétaires évoquées ici restent à suivre dans les textes définitifs.
+Un dépôt ouvre une discussion ; un vote en première lecture ne garantit pas l’application d’une mesure. Les aides d’urgence publiées par décret suivent leur propre calendrier. Le crédit d’impôt pour le débroussaillement dépend du budget de l’État (PLF), distinct de celui de la Sécurité sociale (PLFSS). Le rejet du PLFSS ne tranche donc pas le sort de ce crédit. Les mesures budgétaires restent à suivre dans les textes définitifs.
 
-Le vote : scrutin n° 9097 du 23 octobre 2026, sur la deuxième partie (recettes) du projet de loi de financement de la sécurité sociale pour 2027 (première lecture). 138 votants : 1 pour, 115 contre, 22 abstentions.
+Le vote : scrutin n° 9097 du 23 octobre 2026, sur la deuxième partie (recettes) du projet de loi de financement de la sécurité sociale pour 2027 (première lecture). 138 votants : 1 pour, 115 contre, 22 abstentions ; 2 non-votants de droit.
+
+Fiche visuelle « La suite · deux budgets distincts » : un vote ne clôt pas tout le dossier.
+
+- Budget social · PLFSS : article 4 adopté, puis recettes rejetées (115 voix contre les recettes) ; examen au Sénat au 14 novembre.
+- Budget de l’État · PLF : débroussaillement et fiscalité locale ; parcours distinct, statut final à suivre.
+
+Le vote sur les recettes concerne tout le budget social. Les aides déjà publiées par décret ont leur propre calendrier.
 
 Sources : [Parcours du texte au Sénat](https://www.senat.fr/travaux-parlementaires/textes-legislatifs/la-loi-en-clair/projet-de-loi-de-financement-de-la-securite-sociale-pour-2027.html) (Sénat) · [Scrutin n° 9097](https://www.assemblee-nationale.fr/dyn/17/scrutins/9097) (Assemblée nationale).
 
@@ -146,9 +168,7 @@ Explorez les cinq scrutins du récit, par groupe ou par député. Les effectifs 
 - Décompte : 1 pour, 115 contre, 22 abstentions, 2 non-votants de droit (138 votants).
 - Sources : [scrutin n° 9097](https://www.assemblee-nationale.fr/dyn/17/scrutins/9097) · [dossier du Sénat](https://www.senat.fr/dossier-legislatif/plfss2027.html).
 
-À noter : le projet de loi de finances (PLF, le budget de l’État) et le projet de loi de financement de la sécurité sociale (PLFSS, le budget de la Sécurité sociale) suivent chacun leur procédure. Le rejet du PLFSS à l’Assemblée ne change pas le statut du crédit d’impôt débattu dans le PLF.
-
-La répartition des votes par groupe et les positions nominatives de chaque député sont consultables dans l’explorateur de la page (« Répartition par groupe », « Positions nominatives »).
+Dans l’explorateur de la page, on choisit l’un des cinq scrutins pour voir son objet, son décompte et le lien vers l’analyse officielle. La « Répartition par groupe » compare les groupes sur une échelle commune (pour / contre / abstention). Les « Positions nominatives » permettent de retrouver un député par son nom ou son département et de filtrer par position (pour, contre, abstention, non-votant de droit). Un député sans position publiée apparaît comme « Aucune position publiée ».
 
 ## Pour aller plus loin {#pour-aller-plus-loin}
 
@@ -176,6 +196,18 @@ Titres repérés dans Hémicycle parmi les dépôts depuis juillet. Leur présen
 - [Proposition de loi pour une meilleure prise en charge collective des obligations légales de débroussaillement](https://www.assemblee-nationale.fr/dyn/opendata/PIONANR5L17B3402.json) · déposée le 27 octobre 2026 (PIONANR5L17B3402)
 - [Proposition de loi visant à valoriser la réserve communale de sécurité civile](https://www.assemblee-nationale.fr/dyn/opendata/PIONANR5L17B3442.json) · déposée le 5 novembre 2026 (PIONANR5L17B3442)
 
+## Données ouvertes {#donnees}
+
+_Prolongez votre lecture._
+
+Téléchargez les données de cette édition au format CSV UTF-8. Les fichiers sont un instantané au 14 novembre 2026, avec leurs liens de source. Une position non publiée ne signifie pas une absence.
+
+- [Résultats des 5 scrutins](data/scrutins.csv) (`scrutins.csv`) : numéro, date, objet, pour, contre, abstentions, non-votants de droit, source.
+- [Votes nominatifs](data/votes.csv) (`votes.csv`) : 719 positions publiées sur les cinq scrutins, avec scrutin, date, identifiant, nom, département, circonscription, groupe au moment du vote, position et source.
+- [Textes repérés](data/textes.csv) (`textes.csv`) : les 13 textes de la section « Pour aller plus loin », avec identifiant, titre, date de dépôt et source.
+
+La page propose aussi d’explorer les données avec l’outil Hémicycle de la rédaction.
+
 ## Méthodologie
 
 État du dossier au 14 novembre 2026. La carte reprend une sélection documentée par le CNPF, dont le bilan 2026 est provisoire. La BDIFF réserve sa consultation publique aux années antérieures à la campagne en cours.
@@ -186,9 +218,10 @@ Recherche Hémicycle sur les textes déposés depuis le 1ᵉʳ juillet, les scru
 - **Carte.** 28 départements sont renseignés, sur 96 contours de départements métropolitains. En rouge : les départements où le bilan provisoire du CNPF atteste des feux ; la préfecture de la Gironde documente le bilan de Saumos. En gris : « non renseigné », ce qui ne signifie pas qu’aucun feu n’a eu lieu. La carte ne représente ni les périmètres ni la gravité des incendies, et ne calcule aucun pourcentage de territoire brûlé : les périmètres des feux et la superficie des départements n’ont pas été collectés.
 - **Surfaces.** Les chiffres distinguent hectares parcourus, hectares détruits, feu isolé et total départemental. Les 42 000 hectares parcourus par le feu de Saumos ne sont pas une surface détruite ; les 37 296 hectares détruits ne sont pas un total départemental pour la Gironde.
 - **Aides.** L’arrêté reconnaissant le sinistre de grande ampleur (31 juillet), les décrets d’activité partielle (14 août et 17 septembre) et le point du Gouvernement sur les indemnisations (25 septembre) sont trois événements distincts, vérifiés sur Légifrance et sur le site du Gouvernement.
-- **Votes.** Les décomptes suivent l’ordre pour, contre, abstentions, non-votants de droit. Les « votants » sont la somme des voix pour, contre et abstentions. Pour chaque vote, le groupe affiché est celui que donne le scrutin à cette date. Un député absent des positions publiées apparaît comme « aucune position publiée » : ce n’est ni une abstention ni un non-votant de droit.
-- **Statut des mesures.** Un amendement adopté en première lecture n’est pas une mesure en vigueur : l’application du crédit d’impôt pour le débroussaillement n’est pas démontrée au 14 novembre 2026. L’application d’une mesure se vérifie dans une loi promulguée, un décret ou une autre source officielle. Le PLF et le PLFSS suivent chacun leur procédure.
+- **Votes.** Les décomptes suivent l’ordre pour, contre, abstentions, non-votants de droit. Les « votants » sont la somme des voix pour, contre et abstentions ; les non-votants de droit sont indiqués à part, hors graphique. Pour chaque vote, le groupe affiché est celui que donne le scrutin à cette date. Un député absent des positions publiées apparaît comme « aucune position publiée » : ce n’est ni une abstention ni un non-votant de droit.
+- **Statut des mesures.** Un dépôt ouvre une discussion ; un vote en première lecture ne garantit pas l’application d’une mesure. Un amendement adopté en première lecture n’est pas une mesure en vigueur : l’application du crédit d’impôt pour le débroussaillement n’est pas démontrée au 14 novembre 2026. L’application d’une mesure se vérifie dans une loi promulguée, un décret ou une autre source officielle. Le PLF et le PLFSS suivent chacun leur procédure.
 - **Périmètre.** Les données parlementaires portent sur l’Assemblée nationale. La suite au Sénat est indiquée à partir du site du Sénat.
+- **Données ouvertes.** Les fichiers CSV (scrutins, votes nominatifs, textes) sont un instantané au 14 novembre 2026 ; ils reprennent les décomptes et les positions de l’explorateur.
 
 ## Sources
 
@@ -211,4 +244,5 @@ Recherche Hémicycle sur les textes déposés depuis le 1ᵉʳ juillet, les scru
 | Suite du PLFSS 2027 au Sénat | Sénat | [La loi en clair](https://www.senat.fr/travaux-parlementaires/textes-legislatifs/la-loi-en-clair/projet-de-loi-de-financement-de-la-securite-sociale-pour-2027.html) · [Dossier législatif](https://www.senat.fr/dossier-legislatif/plfss2027.html) | — |
 | Recherche parlementaire (textes, scrutins, recherche thématique) | Hémicycle | [Documentation](https://hemicycle.ai/docs) | — |
 | Contours des départements | france-geojson | [GitHub](https://github.com/gregoiredavid/france-geojson) | — |
+| Exports CSV de l’édition (scrutins, votes nominatifs, textes repérés) | Chapô, d’après l’Assemblée nationale via Hémicycle | [scrutins.csv](data/scrutins.csv) · [votes.csv](data/votes.csv) · [textes.csv](data/textes.csv) | — |
 | Base de données sur les incendies de forêts en France (consultée, années antérieures seulement) | BDIFF | [bdiff.agriculture.gouv.fr](https://bdiff.agriculture.gouv.fr/) | — |

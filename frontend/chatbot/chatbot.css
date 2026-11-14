@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Lisière · « Poser une question »
+   Chapô · « Poser une question »
    Feuille de style du module chatbot (frontend/chatbot/), chargée par
    chatbot.js. Elle reprend l'identité du dossier « Après les flammes » :
    papier crème, encre vert-noir, rouille, surtitres capitales espacées,
@@ -138,7 +138,7 @@
   box-shadow: none;
 }
 
-/* Bulle pêche avec un « ? » serif italique : écho du point du logo Lisière. */
+/* Bulle pêche avec un « ? » serif italique : écho de l'accent du logo Chapô. */
 .cb-lanceur-icone {
   position: relative;
   flex: none;
