@@ -106,6 +106,19 @@
   .pied button { margin-left: auto; padding: 5px 12px; font-size: .85rem; }
   details { font-size: .8rem; color: var(--discret); margin-top: 6px; }
   details pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 6px 0 0; }
+  /* Appels API : déroulé des appels Featherless (LLM) et Hémicycle (outils) */
+  .appels { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: .82rem; }
+  .appels li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 6px; overflow-wrap: anywhere; }
+  .appels li.outil { padding-left: 18px; position: relative; }
+  .appels li.outil::before { content: "↳"; position: absolute; left: 4px; color: var(--discret); }
+  .appels .type {
+    font-size: .7rem; font-weight: 600; text-transform: uppercase; letter-spacing: .03em;
+    padding: 1px 6px; border-radius: 4px; border: 1px solid var(--bordure);
+  }
+  .appels li.llm .type { color: var(--accent); border-color: var(--accent); }
+  .appels li.outil.erreur code { color: var(--erreur); }
+  .appels code { font-size: .8rem; }
+  .appels .discret { color: var(--discret); }
 </style>
 </head>
 <body>
@@ -249,12 +262,52 @@
     boutonCopier.addEventListener("click", () => copier(texteACopier(donnees), boutonCopier));
     pied.append(boutonCopier);
     carte.append(pied);
-    const outils = donnees.outils_utilises || [];
-    if (outils.length) {
-      const resume = outils.map((o) => `${o.outil} ${JSON.stringify(o.arguments)} → ${o.statut}, ${o.credits} cr.`).join("\n");
-      carte.append(el("details", {}, [el("summary", { texte: `Outils appelés (${outils.length})` }), el("pre", {}, el("code", { texte: resume }))]));
-    }
+    const appels = afficherAppels(donnees);
+    if (appels) carte.append(appels);
     return carte;
+  }
+
+  // ---- Appels API : ce qu'a fait le modèle Featherless, et les appels Hémicycle qui en découlent ----
+  const virgule = (n) => String(n).replace(".", ",");
+
+  function formaterArguments(args) {
+    return Object.entries(args || {}).map(([cle, valeur]) => `${cle}: ${JSON.stringify(valeur)}`).join(", ");
+  }
+
+  function ligneOutil(o) {
+    const parServeur = o.lance_par === "serveur";
+    return el("li", { classe: "outil" + (o.statut === "erreur" ? " erreur" : "") }, [
+      el("span", { classe: "type", texte: "Hémicycle" }),
+      el("code", { texte: `${o.outil}(${formaterArguments(o.arguments)})` }),
+      el("span", { classe: "discret", texte: `${o.statut} · ${o.credits} cr.${o.duree_s != null ? " · " + virgule(o.duree_s) + " s" : ""}` }),
+      el("span", { classe: "badge neutre", texte: parServeur ? "lancé par le serveur (recherche automatique)" : "demandé par le modèle" }),
+    ]);
+  }
+
+  function afficherAppels(donnees) {
+    const meta = donnees.meta || {};
+    const etapes = meta.etapes_llm || [];
+    const outils = donnees.outils_utilises || [];
+    if (!etapes.length && !outils.length) return null;
+    const liste = el("ol", { classe: "appels" });
+    for (const e of etapes) {
+      const ici = outils.filter((o) => o.etape === e.etape);
+      const demandes = e.outils_demandes || [];
+      let action;
+      if (demandes.length) action = `demande ${demandes.join(", ")}${e.appels_en_texte ? " (appels écrits en texte, récupérés par le serveur)" : ""}`;
+      else if (ici.some((o) => o.lance_par === "serveur")) action = "n'a appelé aucun outil";
+      else action = "rédige la réponse";
+      liste.append(el("li", { classe: "llm" }, [
+        el("span", { classe: "type", texte: "Featherless" }),
+        el("code", { texte: meta.modele || "LLM" }),
+        el("span", { classe: "discret", texte: `${virgule(e.duree_s)} s${e.reflexion ? " · réflexion" : ""}` }),
+        el("span", { texte: `→ ${action}` }),
+      ]));
+      for (const o of ici) liste.append(ligneOutil(o));
+    }
+    for (const o of outils.filter((o) => o.etape == null)) liste.append(ligneOutil(o));
+    const titre = `Appels API · ${etapes.length} Featherless · ${outils.length} Hémicycle`;
+    return el("section", {}, [el("h2", { texte: titre }), liste]);
   }
 
   function carteErreur(question, message) {

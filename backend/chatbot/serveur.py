@@ -193,6 +193,10 @@ def _booleen_env(nom: str, defaut: bool) -> bool:
 class Parametres:
     port: int
     reflexion: bool  # False : chat_template_kwargs {"enable_thinking": false}
+    # True : réflexion activée au 1er appel du modèle seulement. Avec la réflexion, Qwen3.8-27B émet
+    # des `tool_calls` natifs et choisit lui-même ses appels Hémicycle ; sans, il répond souvent sans
+    # chercher. Les tours suivants (rédaction à partir des résultats) restent rapides.
+    reflexion_premier_tour: bool
     max_tokens: int  # sans réflexion (CHATBOT_MAX_TOKENS)
     temperature: float
     max_credits_question: int
@@ -208,6 +212,7 @@ def charger_parametres() -> Parametres:
     return Parametres(
         port=_entier_env("CHATBOT_PORT", 8000, 1),
         reflexion=reflexion,
+        reflexion_premier_tour=_booleen_env("CHATBOT_REFLEXION_PREMIER_TOUR", True),
         # La réflexion compte dans les tokens de sortie : prévoir large quand elle est active.
         max_tokens=_entier_env("CHATBOT_MAX_TOKENS", 900, 100),
         temperature=0.3,
@@ -975,7 +980,9 @@ async def repondre(etat: EtatServeur, question: str, historique: list[MessageHis
     appels_en_texte = 0
     reponse: ReponseChat | None = None
 
-    async def executer_lot(appels: list[Any]) -> None:
+    etapes_llm: list[dict[str, Any]] = []
+
+    async def executer_lot(appels: list[Any], etape: int) -> None:
         """Exécute des appels d'outils et ajoute les messages `role: tool` à la conversation."""
         for tool_call in appels:
             resultat, depuis_cache = await executer_appel(etat, tool_call, compteur)
@@ -989,14 +996,23 @@ async def repondre(etat: EtatServeur, question: str, historique: list[MessageHis
                 "nb_sources": len(resultat.sources),
                 "duree_s": resultat.duree_s,
                 "lance_par": "serveur" if str(tool_call.id).startswith("recherche_auto_") else "modele",
+                "etape": etape,
             })
         if compteur.limite_atteinte:
             messages[-1]["content"] += NOTE_LIMITE
 
-    for _ in range(compteur.max_appels + 2):
+    for tour in range(compteur.max_appels + 2):
         avec_outils = not compteur.limite_atteinte
-        reponse = await _appeler_llm(etat, messages, etat.outils if avec_outils else None, reflexion)
+        reflexion_tour = reflexion or (tour == 0 and avec_outils and etat.parametres.reflexion_premier_tour)
+        reponse = await _appeler_llm(etat, messages, etat.outils if avec_outils else None, reflexion_tour)
         appels_en_texte += getattr(reponse, "appels_en_texte", 0)
+        etapes_llm.append({
+            "etape": tour + 1,
+            "duree_s": round(reponse.duree_s, 1),
+            "reflexion": reflexion_tour,
+            "outils_demandes": [appel.function.name for appel in (reponse.appels_outils or [])],
+            "appels_en_texte": getattr(reponse, "appels_en_texte", 0),
+        })
         latences.append(round(reponse.duree_s, 1))
         if reponse.usage:
             tokens["entree"] += getattr(reponse.usage, "prompt_tokens", 0) or 0
@@ -1018,12 +1034,12 @@ async def repondre(etat: EtatServeur, question: str, historique: list[MessageHis
                     for a in appels
                 ],
             })
-            await executer_lot(appels)
+            await executer_lot(appels, tour + 1)
             continue
         if not reponse.appels_outils or not avec_outils:
             break
         messages.append(reponse.message_assistant())
-        await executer_lot(reponse.appels_outils)
+        await executer_lot(reponse.appels_outils, tour + 1)
 
     texte, puces_coupees = limiter_puces(nettoyer_reponse(reponse.texte if reponse else ""))
     if reponse is not None and reponse.raison_fin == "length" and texte:
@@ -1086,8 +1102,10 @@ async def repondre(etat: EtatServeur, question: str, historique: list[MessageHis
         "meta": {
             "modele": etat.llm.modele,
             "reflexion": reflexion,
+            "reflexion_premier_tour": etat.parametres.reflexion_premier_tour,
             "duree_s": duree,
             "appels_llm": len(latences),
+            "etapes_llm": etapes_llm,
             "latences_llm_s": latences,
             "tokens": tokens,
             "taille_reflexion": taille_reflexion,
