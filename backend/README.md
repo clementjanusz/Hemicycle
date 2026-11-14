@@ -196,6 +196,26 @@ Le module réutilisable est dans [`chatbot/hemicycle_tools.py`](chatbot/hemicycl
 
 Variables facultatives : `CHATBOT_MCP_OUTILS` (liste blanche, vide = valeur par défaut du code), `CHATBOT_MCP_MAX_CARACTERES` (6000 par résultat), `CHATBOT_MCP_MAX_CARACTERES_QUESTION` (40000 cumulés par question), `CHATBOT_MAX_TOOL_CALLS` (5).
 
+### Déployer sur Vercel
+
+Le site et le chatbot tiennent dans **un seul projet Vercel, sur le plan gratuit (Hobby)** : Vercel lance `serveur.py` comme une fonction Python, via [`app.py`](../app.py) à la racine. Le site est la page d'accueil (`/`) et l'outil de rédaction est sur `/redaction`. Le site et l'API ont la même origine.
+
+Fichiers de déploiement, tous à la racine : `app.py` (point d'entrée), `requirements.txt` (dépendances, que `backend/chatbot/requirements.txt` inclut), `.python-version` (3.12), `vercel.json` (300 s au plus par requête, le maximum du plan gratuit) et `.vercelignore` (`.env` et `.venv` ne sont jamais envoyés).
+
+1. **Importer le dépôt** sur vercel.com (*Add New → Project*), en laissant le **Root Directory à la racine** : le serveur lit `rapports/` et `frontend/` depuis la racine. Vercel reconnaît FastAPI tout seul ; pas de *Build Command*.
+2. **Variables d'environnement** (*Settings → Environment Variables*) : recopier celles du `.env`, au moins `HEMICYCLE_MCP_URL`, `HEMICYCLE_MCP_KEY`, `FEATHERLESS_API_KEY`, `FEATHERLESS_BASE_URL` et `FEATHERLESS_MODEL`. Ne pas définir `CHATBOT_TRACE` : le disque est en lecture seule.
+3. **Déployer**, puis vérifier :
+   ```bash
+   curl -s https://<projet>.vercel.app/api/rapports   # {"numeros": ["2026-11", "demo"]}
+   open https://<projet>.vercel.app/                  # le site, avec le widget du chatbot
+   ```
+
+Sans compte GitHub relié : `npx vercel deploy` depuis la racine (même configuration ; les variables se règlent dans le tableau de bord ou avec `npx vercel env add`).
+
+Pour reproduire le démarrage de Vercel en local, depuis la racine : `backend/chatbot/.venv/bin/uvicorn app:app --port 8000`.
+
+**Limites acceptées pour la démo** : chaque instance Vercel a son propre compteur de crédits (`CHATBOT_MAX_CREDITS_SERVEUR`) et sa propre file d'attente Featherless, remis à zéro à chaque démarrage à froid. La session MCP n'est pas rouverte si elle expire. La première question après une période d'inactivité attend quelques secondes de plus, le temps d'ouvrir la session MCP.
+
 ---
 
 ## Outil de rédaction (journalistes)

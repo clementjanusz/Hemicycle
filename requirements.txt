@@ -1,0 +1,10 @@
+# Dépendances du chatbot — Python ≥ 3.11 (3.12 sur Vercel, voir .python-version)
+# Liste de référence : Vercel la lit à la racine du dépôt ; backend/chatbot/requirements.txt l'inclut.
+openai>=3.51,<4
+python-dotenv>=1.2,<2
+# Client MCP Hémicycle (SDK officiel ≥ 2.3 : streamable HTTP, en-têtes passés via httpx2)
+mcp>=2.3,<3
+httpx2>=2.10,<3
+# Serveur du chatbot et de l'outil de rédaction (serveur.py)
+fastapi>=0.162,<1
+uvicorn>=0.54,<1

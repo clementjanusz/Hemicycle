@@ -74,9 +74,9 @@ Contexte : [`backend/README.md`](README.md) · [`docs/ARCHITECTURE.md`](../docs/
   - [ ] ~~limiter le nombre de requêtes par visiteur~~ hors périmètre (démo) et la longueur des questions (longueur : 1 000 caractères au plus dans `serveur.py` ; nombre de requêtes par visiteur : à faire) ;
   - [x] CORS ouvert à toutes les origines (`allow_origins=["*"]`, démo) dans `serveur.py`, vérifié le 14/11/2026 (préflight `/chat` et `GET /api/rapports`).
 - [x] **Choisir l'hébergement** du chatbot : **Vercel, plan gratuit (Hobby)**, un seul projet pour le site et l'API (même domaine, pas de CORS). Mise en ligne **à la fin**, après la fusion des branches.
-- [ ] **Déployer sur Vercel** (à la fin) :
-  - [ ] `app.py` à la racine : ajoute `backend/chatbot` au `sys.path` et réexporte `app` de `serveur.py` (Vercel cherche `app.py`, `main.py` ou `index.py` à la racine ou dans `api/`) ;
-  - [ ] `requirements.txt` à la racine : `-r backend/chatbot/requirements.txt` ;
+- [ ] **Déployer sur Vercel** depuis `main` (procédure dans le [README](README.md#déployer-sur-vercel)) :
+  - [x] `app.py` à la racine : ajoute `backend/chatbot` au `sys.path` et réexporte `app` de `serveur.py`. Vérifié le 14/11/2026 avec `uvicorn app:app` depuis la racine : `/` (site et widget), `/redaction`, `/api/rapports`, `/etat` et `/chat/flux` (salutation, 0 crédit) répondent ;
+  - [x] `requirements.txt` à la racine (liste de référence, que Vercel lit) ; `backend/chatbot/requirements.txt` l'inclut ; `.python-version` = 3.12 ; `vercel.json` : `maxDuration` 300 s ; `.vercelignore` : `.env` et `.venv` jamais envoyés ;
   - [ ] **ne pas** mettre le Root Directory sur `backend/chatbot` : le serveur lit `rapports/` et `frontend/` depuis la racine ;
   - [ ] recopier les variables du `.env` dans le tableau de bord Vercel ; laisser `CHATBOT_TRACE` vide (disque en lecture seule, sauf `/tmp`) ;
   - [ ] après déploiement : `GET /api/rapports` liste bien les numéros, et une question du mode lecteur fonctionne.

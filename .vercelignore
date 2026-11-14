@@ -1,0 +1,9 @@
+# Jamais envoyé à Vercel (utile pour `vercel deploy` depuis un poste ; un déploiement Git ne contient déjà que les fichiers commités).
+# Les clés se règlent dans le tableau de bord Vercel, pas dans un .env.
+.env
+.env.*
+**/.venv
+**/__pycache__
+**/.pytest_cache
+data/raw
+.DS_Store
