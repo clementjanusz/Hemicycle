@@ -182,6 +182,11 @@ class Attribution(unittest.TestCase):
         self.assertEqual([l["appels"] for l in lignes], [[0], [1], [2], []])
         self.assertTrue(lignes[0]["texte"].startswith("- 12/11/2026"))
 
+    def test_titre_de_section_sans_appel(self):
+        appels = [(0, json.dumps({"scrutins": [{"numero": 9895, "titre": "loi de finances 2026"}]}), [])]
+        lignes = attribuer_lignes("### Loi de finances 2026\n- **12/11/2026 · Rejeté** : ensemble (scrutin n° 9895)", appels)
+        self.assertEqual([l["appels"] for l in lignes], [[], [0]])
+
     def test_numero_absent_et_date_ambigue(self):
         appels = [(0, '{"date":"12/11/2026"}', []), (1, '{"date":"12/11/2026"}', []), (2, '{"date":"12/11/2026"}', [])]
         lignes = attribuer_lignes("- 12/11/2026 : un fait sans référence.", appels)

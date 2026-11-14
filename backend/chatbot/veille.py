@@ -985,6 +985,9 @@ def attribuer_lignes(texte: str, appels: Iterable[tuple[int, str, list[dict[str,
         ligne = brute.strip()
         if not ligne:
             continue
+        if ligne.startswith("#"):  # titre de section : pas de donnée à justifier
+            lignes.append({"texte": ligne, "appels": []})
+            continue
         trouves: list[int] = [i for i, _, sources in appels if any(_cite(s, ligne) for s in sources)]
         # Identifiant ou n° repris d'un résultat : cumulé avec les sources citées (« Didier Lemaire a voté
         # pour (scrutin n° 9895) » s'appuie sur chercher_depute ET sur resultat_scrutin).

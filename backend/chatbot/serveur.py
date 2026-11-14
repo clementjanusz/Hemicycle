@@ -352,14 +352,36 @@ Méthode, pour CHAQUE question :
 
 Identifiants : scrutin VTANR5L17V<numéro> (VTANR5L17V1234 = scrutin n° 1234) ; député PA<chiffres> ; texte PRJLANR5L17B<numéro> (projet de loi) ou PIONANR5L17B<numéro> (proposition de loi) ; dossier DLR5L17N<chiffres> ; amendement AMANR5L17….
 
-Forme de la réponse (pour un journaliste qui prépare un article : complète et précise) :
-- En français. Commence par une phrase de synthèse, sans puce, qui répond directement à la question (35 mots au plus).
-- Puis de 4 à {MAX_PUCES} puces, les faits les plus importants d'abord (votes sur l'ensemble d'un texte, adoptions et rejets, textes inscrits en séance, étapes de la navette). Une puce par fait, en une ou deux phrases (45 mots au plus) : la date (JJ/MM/AAAA), le fait, puis tous les détails utiles présents dans les résultats — intitulé exact, auteur ou rapporteur et son groupe, décompte (pour, contre, abstentions, votants) et sort du vote, positions des groupes, étape de la procédure, commission saisie, nombre d'amendements, suite prévue au Sénat ou en séance.
-- Termine chaque puce par sa source entre parenthèses, par exemple « (scrutin n° 1234) », « (texte n° 567) », « (amendement n° 89) », « (scrutin du Sénat n° 99) », « (fiche du député) » ou « (ordre du jour du JJ/MM/AAAA) ».
-- Si les résultats annoncent une suite (séance prévue, examen au Sénat, commission mixte paritaire), ajoute une dernière puce « À suivre : … » avec sa date et sa source. N'invente jamais de suite.
-- N'écris qu'un fait est absent (« aucun scrutin… ») que si un outil l'a vérifié, et cite cet outil.
-- 350 mots au plus au total, sans titre ni conclusion. Chiffres et intitulés repris exactement des résultats d'outils. Ton neutre : ni opinion, ni qualificatif, ni pronostic.
-- Pas de liens : les sources sont affichées à part."""
+Forme de la réponse : une note de veille en français, claire et utile à un journaliste, lisible en trente secondes. Modèle (les éléments entre chevrons sont à remplacer ; une section sans contenu disparaît) :
+
+**En bref** : <une ou deux phrases, 40 mots au plus : le fait le plus important et son chiffre clé>
+
+### <Titre de section : le texte ou le sujet, 2 à 6 mots>
+- **<JJ/MM/AAAA> · <sort ou étape>** : <le fait, dit simplement> (<source>)
+
+### Chiffres clés
+- <un décompte ou une comparaison, chiffres à l'appui> (<source>)
+
+### À suivre
+- **<échéance ou étape à venir>** : <ce qui doit se passer> (<source>)
+
+Règles de fond :
+- Ne retiens que les faits qui portent sur le sujet de la question ; écarte un résultat hors sujet même si un outil l'a renvoyé.
+- Commence par ce qui existe ou s'est passé (textes, votes, étapes), pas par ce qui manque.
+- Dis ce que fait un texte ou un amendement (son objet, en quelques mots tirés des résultats) plutôt que son numéro ou son article.
+- Regroupe ce qui se ressemble : plusieurs amendements sur un même sujet ou un même jour tiennent en une puce (« trois amendements sur l'indemnisation des sinistrés, tous rejetés le 12/11/2026 »). Ne détaille à part que les plus marquants : ceux du Gouvernement, ceux adoptés, les votes les plus serrés.
+
+Règles de forme :
+- Adapte la longueur à la question. Question précise (un vote, un député, une date) : « En bref » puis 1 à 3 puces, sans titre de section. Question large (la semaine, un texte, un thème) : 2 à 4 sections, 10 puces au plus en tout, 300 mots au plus.
+- Une puce = un fait, 25 mots au plus, qui commence en gras par la date et le sort ou l'étape : « **12/11/2026 · Rejeté** », « **15/09/2026 · Déposée** », « **10/11/2026 · En séance** ». Vote : « rejeté (25 pour, 49 contre) », abstentions seulement si elles ne sont pas nulles. Auteur et groupe si les résultats les donnent.
+- Aucun code dans les phrases : jamais d'identifiant (DLR…, PRJL…, PION…, PA…, VTANR…, AMANR…, PO…), ni « texte n° », « dossier », numéro d'amendement ou d'article, sauf si la question les demande. Les numéros vont seulement dans la source finale.
+- Termine chaque puce par UNE seule source entre parenthèses, la plus précise : « (scrutin n° 1234) », « (texte n° 567) », « (amendement n° 89) », « (scrutin du Sénat n° 99) », « (fiche du député) » ou « (ordre du jour du JJ/MM/AAAA) ». Pas de source dans « En bref » ni dans les titres.
+- Intitulés : l'intitulé exact à la première mention, ensuite une désignation courte tirée de cet intitulé (« la proposition de loi sur les incendies volontaires »). Sigles admis : PLF, PLFSS, CMP et les sigles de groupes donnés par les résultats.
+- « Chiffres clés » (1 à 3 puces, question large seulement) : des décomptes ou comparaisons que l'on peut refaire avec les chiffres des résultats, chiffres à l'appui (« 3 propositions de loi déposées depuis le 23/07/2026 », « 49 voix contre, 25 pour »). N'écris « unanimité », « large » ou « serré » que si les chiffres le montrent (unanimité = 0 voix dans un des camps). Jamais un zéro ni une absence (« 0 scrutin… ») dans les chiffres clés. Aucune cause, aucune interprétation, aucun pronostic.
+- Cohérence : compte les éléments de ta propre liste avant d'écrire un total ; un même nombre partout (« En bref », puces, chiffres clés).
+- « À suivre » : uniquement ce qui reste à venir après aujourd'hui ({_date_fr(aujourd_hui)}) — séance prévue à une date future, texte ou amendement en attente d'examen, transmission au Sénat, commission mixte paritaire. En gras, l'échéance ou l'étape (« **Séance du 18/11/2026** », « **En attente d'examen** »), jamais une date passée. Rien à venir dans les résultats : pas de section. N'invente jamais de suite.
+- N'écris qu'un fait est absent que si un outil l'a vérifié, et cite cet outil.
+- Chiffres et intitulés exacts. Ton neutre, phrases courtes, sans qualificatif. Gras seulement pour « En bref » et le début des puces. Pas de liens (les sources sont affichées à part), pas de tableau, pas de conclusion."""
 
 
 def mois_long(mois: str) -> str:
@@ -917,7 +939,7 @@ def corriger_noms_parametres(arguments: dict[str, Any], proprietes: set[str]) ->
     return corriges
 
 
-MAX_PUCES = 12
+MAX_PUCES = 14
 MOTIF_PUCE = re.compile(r"^\s*([-*•]|\d+[.)])\s+")
 
 
@@ -933,7 +955,19 @@ def limiter_puces(texte: str, maximum: int = MAX_PUCES) -> tuple[str, bool]:
         elif coupe:
             continue
         gardees.append(ligne)
-    return "\n".join(gardees).strip(), coupe
+    return "\n".join(retirer_sections_vides(gardees)).strip(), coupe
+
+
+def retirer_sections_vides(lignes: list[str]) -> list[str]:
+    """Retire les titres « ### … » sans contenu avant le titre suivant ou la fin (section vide ou coupée)."""
+    gardees: list[str] = []
+    for i, ligne in enumerate(lignes):
+        if ligne.lstrip().startswith("#"):
+            suite = next((l for l in lignes[i + 1:] if l.strip()), None)
+            if suite is None or suite.lstrip().startswith("#"):
+                continue
+        gardees.append(ligne)
+    return gardees
 
 
 def nettoyer_reponse(texte: str) -> str:

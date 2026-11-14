@@ -160,6 +160,16 @@
   .detail-appel pre { margin: 0; white-space: pre-wrap; font-size: .76rem; }
   .detail-appel .etiquette { color: var(--discret); }
   .reponse strong { font-weight: 650; }
+  .reponse .section-titre {
+    font-size: .82rem; text-transform: uppercase; letter-spacing: .04em; color: var(--accent);
+    margin: 14px 0 2px; padding-bottom: 3px; border-bottom: 1px solid var(--bordure);
+  }
+  .reponse .section-titre:first-child { margin-top: 0; }
+  .reponse .source-ligne { color: var(--discret); font-size: .78rem; white-space: nowrap; }
+  .reponse .chapeau {
+    background: var(--accent-doux); border-left: 3px solid var(--accent); border-radius: 0 6px 6px 0;
+    padding: 6px 10px; font-size: 1rem;
+  }
   .avertissement {
     background: var(--alerte-fond); color: var(--alerte-texte);
     border-radius: 6px; padding: 6px 10px; font-size: .85rem; margin: 8px 0 0;
@@ -502,6 +512,8 @@
   }
 
   // ---------- Affichage d'une réponse ----------
+  const SOURCE_EN_FIN = /\s*\(((?:scrutins?|textes?|amendements?|fiche|ordre du jour|dossiers?|recherche|agenda|lois?|registre|signaux|fil)\b[^()]*)\)\s*\.?\s*$/i;
+
   function afficherLignes(donnees, idCarte) {
     const bloc = el("div", { classe: "reponse" });
     const appels = donnees.outils_utilises || [];
@@ -509,8 +521,16 @@
       ? donnees.lignes
       : String(donnees.reponse || "").split(/\r?\n/).filter((l) => l.trim()).map((texte) => ({ texte, appels: [] }));
     for (const ligne of lignes) {
+      const titre = ligne.texte.match(/^#{1,6}\s+(.*)$/);
+      if (titre) { bloc.append(el("h3", { classe: "section-titre", texte: titre[1].replace(/\*\*/g, "") })); continue; }
       const puce = ligne.texte.match(/^([-*•]|\d+[.)])\s+(.*)$/);
-      const texte = el("p", { classe: "ligne-texte" + (puce ? " puce" : "") }, enrichir(puce ? puce[2] : ligne.texte));
+      const chapeau = !puce && /^\*\*En bref\*\*/i.test(ligne.texte);
+      // Source citée en fin de ligne (« (scrutin n° 9895) ») : affichée en discret, l'appel API est à droite.
+      let corps = puce ? puce[2] : ligne.texte, source = null;
+      const fin = chapeau ? null : corps.match(SOURCE_EN_FIN);
+      if (fin && fin.index > 0) { source = fin[1]; corps = corps.slice(0, fin.index).replace(/\s*[;,]\s*$/, ""); }
+      const texte = el("p", { classe: "ligne-texte" + (puce ? " puce" : "") + (chapeau ? " chapeau" : "") },
+        [enrichir(corps), source ? el("span", { classe: "source-ligne", texte: ` · ${source}` }) : null]);
       const colonne = el("div", { classe: "ligne-appels" });
       const rangee = el("div", { classe: "ligne" }, [texte, colonne]);
       for (const indice of ligne.appels || []) {
