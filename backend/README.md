@@ -5,8 +5,11 @@ On travaille comme une rédaction, pas comme un SaaS : le back-end ne sert pas d
 ```
 backend/
 ├── pipeline/   # Le batch mensuel : collecte → transformation → indicateurs
-└── chatbot/    # Le seul service en ligne : questions des lecteurs
+├── chatbot/    # Le seul service en ligne : questions des lecteurs
+└── TODO.md     # Liste des éléments à compléter
 ```
+
+👉 **Ce qu'il reste à faire : [`TODO.md`](TODO.md)**
 
 | Brique | Rôle | Quand ça tourne | Accès à Hémicycle |
 | --- | --- | --- | --- |
@@ -102,16 +105,22 @@ Lecteur ── question ──▶ POST /chat
 3. **Pas de source, pas de réponse.** S'il ne trouve rien de solide, il le dit.
 4. **Neutralité.** Il expose des faits et des votes, pas d'opinion politique.
 
-### Choix du modèle (Featherless)
+### Modèle : Arete 27B
 
-Le chatbot a besoin d'un modèle qui gère le **tool calling natif**. D'après la doc de Featherless, c'est le cas de :
+Modèle retenu : **[`NousResearch/Arete-27B`](https://featherless.ai/models/NousResearch/Arete-27B)**, un fine-tune de Qwen3.8-27B par Nous Research.
 
-| Modèle | Atouts | Points d'attention |
-| --- | --- | --- |
-| Famille **Qwen 3** (ex. `Qwen/Qwen3-32B`) | Bon en français ; 2 unités de concurrence | Contexte servi souvent limité à **32K tokens** → rapport et résultats d'outils à garder compacts |
-| **Kimi-K2** (`moonshotai/Kimi-K2-Instruct`) | Contexte long (jusqu'à 256K sur le plan Developer) | Gros modèle : 4 unités de concurrence → peu de lecteurs servis en même temps sur un petit plan |
+| Caractéristique | Valeur sur Featherless |
+| --- | --- |
+| Contexte servi | **32K tokens** → rapport et résultats d'outils à garder compacts |
+| Concurrence | 2 unités par requête |
+| *Tool calling* | Indiqué comme supporté — à valider en conditions réelles avec le MCP |
+| Licence | Apache 2.0 |
 
-À vérifier sur la page du modèle choisi ([featherless.ai/models](https://featherless.ai/models)) : taille de contexte réellement servie et coût en unités de concurrence.
+Points de vigilance (détail dans [`TODO.md`](TODO.md#6-modèle--arete-27b)) :
+
+- filtrer l'éventuel bloc de raisonnement (`<think>…</think>`) avant d'afficher la réponse ;
+- score factuel moyen de 2,98/5 sur l'évaluation de ses auteurs → l'ancrage sur le rapport est indispensable ;
+- prévoir un modèle de repli de la famille Qwen 3 si besoin.
 
 ### Garde-fous
 

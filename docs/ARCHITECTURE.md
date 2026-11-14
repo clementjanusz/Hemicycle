@@ -47,7 +47,7 @@ Le détail du chatbot (boucle d'outils, règles de sourçage, garde-fous) est da
 | --- | --- | --- | --- |
 | Fournisseur LLM du chatbot | **Featherless** | Choix de l'équipe : modèles open-weight, API compatible OpenAI | |
 | Accès aux données pour le chatbot | **MCP Hémicycle** + rapport injecté dans le prompt | Le rapport fait foi, le MCP complète | |
-| Modèle Featherless (Qwen 3 ou Kimi-K2) | _…_ | | |
+| Modèle Featherless | **`NousResearch/Arete-27B`** | Choix de l'équipe ; *tool calling* annoncé, 32K de contexte | |
 | Langage du pipeline | _…_ | | |
 | Langage du chatbot | _…_ | | |
 | Format de stockage (JSON, CSV, Parquet, DuckDB) | _…_ | | |
