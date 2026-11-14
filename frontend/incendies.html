@@ -20,6 +20,9 @@
 
 .report-section{padding:56px 0;border-top:1px solid #d6cbbc}.report-section h2{font:400 clamp(34px,5vw,62px)/1 var(--serif);letter-spacing:-.04em;margin:12px 0 20px}.report-section h3{font:400 26px/1.1 var(--serif);margin:10px 0}.report-section .lede{max-width:72ch;margin-bottom:24px}.chapter-grid,.donut-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}.chapter{border-top:3px solid var(--rust);padding-top:16px}.chapter p{margin:12px 0}.chapter a{font-weight:700}.donut-grid{grid-template-columns:repeat(auto-fit,minmax(190px,1fr));margin:25px 0}.vote-card{border:1px solid #d6cbbc;background:#fbf7ed;padding:18px;text-align:left;color:var(--ink)}.vote-card:hover,.vote-card:focus-visible{background:#eae0d1}.vote-card strong{display:block;margin:12px 0;line-height:1.3}.donut{width:130px;height:130px;border-radius:50%;display:grid;place-items:center;margin:12px auto}.donut span{background:var(--paper);border-radius:50%;width:86px;height:86px;display:grid;place-content:center;text-align:center;font-size:12px}.donut b{font:36px/1 var(--serif)}.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:13px}.legend i{display:inline-block;width:10px;height:10px;margin-right:5px}.vote-card small{display:block;margin:5px 0}.table-scroll{overflow-x:auto;margin-top:18px}table{border-collapse:collapse;width:100%;font-size:14px}th,td{padding:14px 10px;border-bottom:1px solid #d6cbbc;text-align:left}th{font-size:12px}caption{text-align:left;margin:10px 0;color:var(--dull)}.vote-badge{display:inline-block;padding:4px 8px;border:1px solid currentColor;border-radius:4px;white-space:nowrap}.vote-0{color:#225744}.vote-1{color:#943520}.vote-2{color:#75521c}.vote-3,.vote-missing{color:#5d6357}.actor-pick{max-width:580px;display:grid;gap:8px}.readout{background:#e5ddce;padding:18px;margin-top:24px}.no-js .dynamic-section{display:none}@media(max-width:760px){.chapter-grid{grid-template-columns:1fr}.report-section{padding:35px 0}.donut-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.vote-card{padding:12px}.donut{width:110px;height:110px}.donut span{width:74px;height:74px}}
 .brand{display:inline-flex;background:var(--paper);padding:2px 12px}.brand img{display:block}.download-links{display:flex;gap:12px;flex-wrap:wrap;margin:16px 0}
+
+.scene-card{width:100%;padding:16px 5%;display:grid;gap:16px}.scene-card h3{font:400 clamp(25px,3vw,40px)/1.05 var(--serif);letter-spacing:-.03em}.scene-card p{font-size:14px}.scene-legend{display:flex;gap:8px 15px;flex-wrap:wrap;font-size:12px}.scene-legend i{display:inline-block;width:9px;height:9px;margin-right:5px}.aid-timeline{list-style:none;padding:0;margin:0 0 0 7px;border-left:2px solid var(--rust)}.aid-timeline li{position:relative;padding:0 0 20px 20px;display:grid;gap:3px;font-size:14px}.aid-timeline li:last-child{padding-bottom:0}.aid-timeline li:before{content:'';position:absolute;width:10px;height:10px;background:var(--rust);border-radius:50%;left:-6px;top:6px}.aid-timeline strong{color:var(--rust)}.expense-bar{display:flex;min-height:100px}.expense-bar span{width:50%;background:var(--green);color:#fff9ed;padding:16px;font:38px/1.1 var(--serif)}.expense-bar span+span{background:#d5cdbf;color:var(--ink)}.expense-bar small{display:block;font:12px/1.5 var(--sans);margin-top:8px}.scene-ring{width:190px;height:190px;border-radius:50%;margin:auto;display:grid;place-items:center}.scene-ring span{width:130px;height:130px;border-radius:50%;background:#eee7d9;display:grid;align-content:center;text-align:center;font-size:13px}.scene-ring strong{font:55px/1 var(--serif)}.vote-dots{display:grid;grid-template-columns:repeat(12,1fr);gap:7px;max-width:350px;width:100%;margin:auto}.vote-dots i{aspect-ratio:1;border-radius:50%;max-width:20px}.legislative-path{display:grid;gap:12px}.legislative-path>div{border-left:3px solid var(--rust);padding:9px 14px;display:grid;gap:7px;font-size:13px;background:#e5ddce}.legislative-path>div+div{border-color:var(--green)}.legislative-path b{color:var(--rust)}
+@media(max-width:760px){.scene-card{padding:6px 0;gap:7px}.scene-card h3{font-size:23px}.scene-card p{font-size:11px}.scene-card .eyebrow{font-size:9px}.aid-timeline li{padding-bottom:8px;font-size:11px}.scene-legend{font-size:10px;gap:5px 9px}.expense-bar{min-height:60px}.expense-bar span{font-size:26px;padding:8px}.expense-bar small{font-size:10px;margin-top:2px}.scene-ring{width:110px;height:110px}.scene-ring span{width:76px;height:76px;font-size:10px}.scene-ring strong{font-size:32px}.vote-dots{max-width:220px;gap:4px}.vote-dots i{max-width:12px}.legislative-path{gap:5px}.legislative-path>div{padding:5px 9px;font-size:10px;gap:3px}}
 </style>
 </head>
 <body>
@@ -36,15 +39,7 @@
 </section>
 <div class="progress" aria-hidden="true"><span id="progress"></span></div>
 <main>
-<section class="report-section wrap" id="reponses">
-<p class="eyebrow">Un sujet, plusieurs leviers</p><h2>Après le feu, trois chantiers.</h2>
-<p class="lede">Les incendies ne se résument pas à une loi. Ce dossier suit les réponses à trois besoins : aider les sinistrés, limiter les prochains feux et donner des moyens aux secours. Décrets, projets de budget et propositions de loi interviennent à des étapes différentes.</p>
-<div class="chapter-grid">
-<article class="chapter"><p class="eyebrow">01 · Réparer</p><h3>Soutenir ceux qui ont tout perdu</h3><p>L’activité partielle exceptionnelle relève de décrets publiés. Les allégements de cotisations et de fiscalité locale relèvent aussi des budgets en discussion.</p><a href="#aides">Suivre les aides ↓</a></article>
-<article class="chapter"><p class="eyebrow">02 · Prévenir</p><h3>Préparer le prochain été</h3><p>Débroussaillement, réserves d’eau, pouvoirs des maires : plusieurs textes repérés abordent la prévention. Un dépôt ou un vote en première lecture ne garantit pas l’application d’une mesure.</p><a href="#prevenir">Comprendre la prévention ↓</a></article>
-<article class="chapter"><p class="eyebrow">03 · Secourir</p><h3>Donner des moyens aux pompiers</h3><p>Cotisations des services d’incendie, volontariat et retraite : les moyens humains et financiers des secours forment un autre volet du dossier.</p><a href="#pompiers">Suivre les moyens des secours ↓</a></article>
-</div><p class="readout"><strong>Comment lire les étapes ?</strong> « Déposé » ouvre une discussion. « Adopté en première lecture » décrit un vote dans une chambre. Pour savoir ce qui s’applique, il faut retrouver le texte définitif et ses conditions d’entrée en vigueur.</p>
-</section>
+
 
 <div class="story wrap" id="recit">
 <figure class="stage" aria-label="Illustration du récit">
@@ -62,8 +57,8 @@
 <a class="source" href="https://www.gironde.gouv.fr/layout/set/print/Actualites/Communiques-de-presse/Communiques-de-presse-2026/Septembre-2026/Le-feu-de-Saumos-est-desormais-eteint">Bilan de Saumos ↗</a>
 </article>
 <article class="step" id="aides" data-scene="relief">
-<p class="eyebrow">Août–septembre · Aides publiées</p>
-<h2>L’aide est arrivée par décret</h2>
+<p class="eyebrow">01 · Réparer · Aides publiées</p>
+<h2>Après le feu, soutenir les sinistrés</h2>
 <p>Le décret du 14 août ouvre une aide exceptionnelle d’activité partielle aux entreprises de moins de 250 salariés éligibles, touchées par des mesures d’évacuation ou de confinement. Le décret du 17 septembre prolonge la période couverte jusqu’au 4 octobre, selon les communes listées en annexe.</p>
 <p>Dès le 31 juillet, un arrêté reconnaît les feux de Saumos et de Biscarrosse comme sinistre de grande ampleur. Le 25 septembre, le Gouvernement indique que les premiers acomptes d’indemnisation des assureurs ont été versés en Gironde et dans les Landes.</p>
 <a class="source" href="https://www.legifrance.gouv.fr/jorf/id/JORFTEXT000054860173">Décret et communes concernées ↗</a>
@@ -71,9 +66,9 @@
 <a class="source" href="https://www.info.gouv.fr/public/index.php/communique/incendies-en-gironde-et-dans-les-landes-l-etat-accelere-la-reconstruction">Point du Gouvernement ↗</a>
 </article>
 <article class="step" id="prevenir" data-scene="8775">
-<p class="eyebrow">15 octobre · Prévention</p>
+<p class="eyebrow">02 · Prévenir · 15 octobre</p>
 <h2>Un crédit d’impôt pour débroussailler</h2>
-<p>L’amendement de Sophie Pantel prévoit de couvrir <strong>50 % des dépenses éligibles</strong> de débroussaillement, dans la limite de 5 000 € de dépenses par foyer fiscal et par an.</p>
+<p>Préparer le prochain été passe aussi par le débroussaillement. L’amendement de Sophie Pantel prévoit de couvrir <strong>50 % des dépenses éligibles</strong> de débroussaillement, dans la limite de 5 000 € de dépenses par foyer fiscal et par an.</p>
 <p class="step-callout">L’Assemblée l’a adopté en première lecture avec 53 voix pour, 14 contre et 40 abstentions. L’entrée en vigueur du crédit reste à établir au 14 novembre.</p>
 <a class="source" href="https://www.assemblee-nationale.fr/dyn/17/amendements/3210A/AN/3339">Amendement I-3339 ↗</a>
 <a class="source" href="#scrutins" data-ballot="8775">Explorer le vote ↓</a>
@@ -87,9 +82,9 @@
 <a class="source" href="#scrutins" data-ballot="8904">Vote sur l’amendement ↓</a>
 </article>
 <article class="step" id="pompiers" data-scene="8924">
-<p class="eyebrow">21 octobre · Services de secours</p>
+<p class="eyebrow">03 · Secourir · 21 octobre</p>
 <h2>Alléger la facture des services d’incendie</h2>
-<p>L’amendement de Sophie Panonacle vise à réduire temporairement en 2027 les cotisations patronales de retraite dues par les services d’incendie et de secours pour leurs pompiers professionnels. Les droits à pension resteraient identiques.</p>
+<p>Les moyens humains et financiers des secours forment un autre volet du dossier. L’amendement de Sophie Panonacle vise à réduire temporairement en 2027 les cotisations patronales de retraite dues par les services d’incendie et de secours pour leurs pompiers professionnels. Les droits à pension resteraient identiques.</p>
 <p class="step-callout">En première lecture, 62 députés ont voté pour, 10 contre et 46 se sont abstenus.</p>
 <a class="source" href="https://www.assemblee-nationale.fr/dyn/17/amendements/3211/AN/306">Amendement n° 306 rectifié ↗</a>
 <a class="source" href="#scrutins" data-ballot="8924">Explorer le vote ↓</a>
@@ -98,14 +93,14 @@
 <p class="eyebrow">23 octobre–14 novembre · La suite au Parlement</p>
 <h2>Le budget est rejeté malgré ces votes</h2>
 <p>Le 23 octobre, l’Assemblée rejette la partie recettes du budget de la Sécurité sociale. Ce vote entraîne le rejet de l’ensemble du projet à l’Assemblée. Au 14 novembre, le Sénat poursuit l’examen.</p>
-<p>Les aides d’urgence publiées par décret suivent leur propre calendrier. Le crédit d’impôt pour le débroussaillement dépend du budget de l’État (PLF), distinct de celui de la Sécurité sociale (PLFSS). Le rejet du PLFSS ne tranche donc pas le sort de ce crédit. Les mesures budgétaires restent à suivre dans les textes définitifs.</p>
+<p>Un dépôt ouvre une discussion; un vote en première lecture ne garantit pas l’application d’une mesure. Les aides d’urgence publiées par décret suivent leur propre calendrier. Le crédit d’impôt pour le débroussaillement dépend du budget de l’État (PLF), distinct de celui de la Sécurité sociale (PLFSS). Le rejet du PLFSS ne tranche donc pas le sort de ce crédit. Les mesures budgétaires restent à suivre dans les textes définitifs.</p>
 <a class="source" href="https://www.senat.fr/travaux-parlementaires/textes-legislatifs/la-loi-en-clair/projet-de-loi-de-financement-de-la-securite-sociale-pour-2027.html">Parcours du texte au Sénat ↗</a>
 <a class="source" href="#scrutins" data-ballot="9097">Explorer le vote sur les recettes ↓</a>
 </article>
 </div>
 </div>
-<section class="report-section wrap dynamic-section" id="panorama"><p class="eyebrow">Les décisions en regard</p><h2>Cinq votes, plusieurs réponses aux feux.</h2><p class="lede">Les anneaux comparent la répartition pour / contre / abstention parmi les votants de chaque scrutin. Le nombre de votants varie : les parts ne mesurent ni la présence des 577 députés ni le soutien à l’ensemble de la politique contre les incendies.</p><div class="legend"><span><i class="pos0"></i>Pour</span><span><i class="pos1"></i>Contre</span><span><i class="pos2"></i>Abstention</span></div><div id="vote-panorama" class="donut-grid"></div><p class="muted">Le vote sur les recettes porte sur l’ensemble du budget social, au-delà des incendies. Les non-votants de droit sont indiqués à part. Chaque carte ouvre les votes nominatifs et la source officielle.</p></section>
-<section class="report-section wrap dynamic-section" id="parcours"><p class="eyebrow">Les élus à la loupe</p><h2>Votre député, d’un vote à l’autre.</h2><p class="lede">Retrouvez la position d’un député élu sur chacun des cinq scrutins du dossier. Le groupe indiqué est celui du scrutin. Une position manquante ne permet pas de conclure à une absence dans l’hémicycle.</p><label class="actor-pick">Député, département ou circonscription<input id="actor-search" type="search" placeholder="Ex. Gironde ou Sophie" autocomplete="off"><select id="actor-choice" aria-label="Choisir un député"></select></label><p id="actor-count" class="muted" role="status"></p><div id="actor-record" class="table-scroll"></div></section>
+
+
 <section class="explore" id="scrutins">
 <div class="wrap">
 <p class="eyebrow">Assemblée nationale</p>
@@ -229,17 +224,25 @@
       } else if (scene === 'relief') {
         byId('stage-label').textContent = 'Aide d’urgence · décret publié';
         byId('stage-foot').textContent = 'Source : décret du 17 septembre 2026, Légifrance.';
-        stage.innerHTML = '<div class="display"><b>4 oct.</b><h3>Dernier jour de la période couverte</h3>' +
-          '<p>Le décret de septembre prolonge l’aide exceptionnelle d’activité partielle pour les entreprises éligibles.</p></div>';
+        stage.innerHTML = '<div class="scene-card"><p class="eyebrow">Réparer · le calendrier des aides</p><h3>Des réponses à plusieurs étapes</h3><ol class="aid-timeline"><li><strong>31 juillet</strong><span>Reconnaissance du sinistre de grande ampleur</span></li><li><strong>14 août</strong><span>Ouverture de l’aide exceptionnelle d’activité partielle</span></li><li><strong>17 septembre</strong><span>Prolongation par décret</span></li><li><strong>4 octobre</strong><span>Fin de la période couverte pour les entreprises éligibles</span></li></ol></div>';
+        byId('stage-foot').textContent = 'Arrêté et décrets cités dans le récit · conditions communales à vérifier dans les annexes.';
       } else {
-        const vote = ballots[scene];
-        const headline = scene === '9097' ? vote.totals[1] + ' contre' : vote.totals[0] + ' pour';
+        const vote = ballots[scene], total = numberVoters(vote);
+        const legend = '<div class="scene-legend">' + vote.totals.slice(0,3).map((n,i) => '<span><i class="pos'+i+'"></i>'+n+' '+positionNames[i].toLowerCase()+'</span>').join('') + '</div>';
         byId('stage-label').textContent = 'Scrutin ' + scene + ' · ' + date.format(new Date(vote.date + 'T12:00:00Z'));
-        byId('stage-foot').textContent = numberVoters(vote) + ' votants · Assemblée nationale, première lecture';
-        stage.innerHTML = '<div class="display"><b>' + headline + '</b><h3>' + escape(ballotNames[scene]) + '</h3>' +
-          voteStrip(vote.totals,numberVoters(vote)) +
-          '<div class="labels"><span>Pour <strong>' + vote.totals[0] + '</strong></span><span>Contre <strong>' +
-          vote.totals[1] + '</strong></span><span>Abst. <strong>' + vote.totals[2] + '</strong></span></div></div>';
+        byId('stage-foot').textContent = total + ' votants · '+vote.totals[3]+' non-votant(s) de droit, hors graphique · première lecture';
+        let visual = '';
+        if (scene === '8775') {
+          visual = '<p class="eyebrow">Prévenir · proposition fiscale</p><h3>La moitié des dépenses éligibles</h3><div class="expense-bar" role="img" aria-label="Crédit proposé de 50 % des dépenses éligibles"><span>50 %<small>crédit proposé</small></span><span>50 %<small>reste des dépenses</small></span></div><p>Pour 5 000 € de dépenses éligibles : jusqu’à <strong>2 500 € de crédit proposé</strong>. Plafond annuel par foyer fiscal.</p><p class="muted">Illustration du dispositif voté en première lecture, dont l’entrée en vigueur reste à établir.</p><div class="mini-result">'+legend+'</div>';
+        } else if (scene === '8905') {
+          const first=vote.totals[0]/total*100, second=(vote.totals[0]+vote.totals[1])/total*100;
+          visual = '<p class="eyebrow">Réparer · cotisations et volontariat</p><h3>Un article largement adopté</h3><div class="scene-ring" aria-hidden="true" style="background:conic-gradient(var(--green) 0 '+first+'%,var(--rust) '+first+'% '+second+'%,var(--amber) '+second+'% 100%)"><span><strong>'+vote.totals[0]+'</strong>pour sur '+total+'</span></div>'+legend+'<p class="muted">Vote sur l’ensemble de l’article 4 : il couvre aussi Mayotte et le volontariat, au-delà des incendies.</p>';
+        } else if (scene === '8924') {
+          visual = '<p class="eyebrow">Secourir · moyens des pompiers</p><h3>Chaque point est une voix</h3><div class="vote-dots" aria-hidden="true">'+vote.totals.slice(0,3).map((n,i)=>('<i class="pos'+i+'"></i>').repeat(n)).join('')+'</div>'+legend+'<p class="muted">Une réduction temporaire des cotisations patronales de retraite est proposée pour 2027, sans modifier les droits à pension.</p>';
+        } else {
+          visual = '<p class="eyebrow">La suite · deux budgets distincts</p><h3>Un vote ne clôt pas tout le dossier</h3><div class="legislative-path"><div><strong>Budget social · PLFSS</strong><span>Article 4 adopté → recettes rejetées</span><b>'+vote.totals[1]+' voix contre les recettes</b><span>Examen au Sénat au 14 novembre</span></div><div><strong>Budget de l’État · PLF</strong><span>Débroussaillement et fiscalité locale</span><span>Parcours distinct · statut final à suivre</span></div></div>'+legend+'<p class="muted">Le vote sur les recettes concerne tout le budget social. Les aides déjà publiées par décret ont leur propre calendrier.</p>';
+        }
+        stage.innerHTML = '<div class="scene-card">'+visual+'</div>';
       }
       stage.classList.remove('enter');
       if (!reduced.matches) {
@@ -369,41 +372,6 @@
     byId('texts').innerHTML = data.texts.map(row => '<li><a href="' + escape(row.source.url) + '">' +
       escape(row.titre_court || row.titre) + '</a> <span class="muted">· ' +
       escape(row.date_depot.slice(0,10)) + '</span></li>').join('');
-    const orderedBallots = Object.keys(ballotNames);
-    byId('vote-panorama').innerHTML = orderedBallots.map(number => {
-      const vote = ballots[number], total = numberVoters(vote);
-      const a = total ? vote.totals[0]/total*100 : 0;
-      const b = total ? (vote.totals[0]+vote.totals[1])/total*100 : 0;
-      return '<a class="vote-card" href="#scrutins" data-overview="' + number + '"><small>' + date.format(new Date(vote.date+'T12:00:00Z')) + ' · n° ' + number + '</small><strong>' + escape(ballotNames[number]) + '</strong><div class="donut" aria-hidden="true" style="background:conic-gradient(var(--green) 0 ' + a + '%,var(--rust) ' + a + '% ' + b + '%,var(--amber) ' + b + '% 100%)"><span><b>' + total + '</b>votants</span></div><small>' + vote.totals[0] + ' pour · ' + vote.totals[1] + ' contre</small><small>' + vote.totals[2] + ' abstentions · ' + vote.totals[3] + ' non-votant(s) de droit</small><small>Voir qui a voté quoi →</small></a>';
-    }).join('');
-    byId('vote-panorama').addEventListener('click', event => {
-      const link = event.target.closest('[data-overview]');
-      if (link) { byId('person').value = ''; chooseVote(link.dataset.overview); }
-    });
-    function renderActor() {
-      const id = byId('actor-choice').value;
-      if (!id) { byId('actor-record').textContent = 'Aucun député ne correspond à cette recherche.'; return; }
-      byId('actor-record').innerHTML = '<table><caption>Positions publiées de ' + escape(data.actors[id][0]) + ' · édition du 14 novembre 2026</caption><thead><tr><th scope="col">Objet du scrutin</th><th scope="col">Position</th><th scope="col">Groupe au vote</th><th scope="col">Source</th></tr></thead><tbody>' + orderedBallots.map(number => {
-        const vote = ballots[number], row = vote.votes.find(row => row[0] === id);
-        const group = row ? vote.groups.find(group => group[0] === row[1]) : null;
-        return '<tr><th scope="row">' + escape(ballotNames[number]) + '</th><td><span class="vote-badge vote-' + (row ? row[2] : 'missing') + '">' + (row ? positionNames[row[2]] : 'Aucune position publiée') + '</span></td><td>' + escape(group ? group[2] : 'Non renseigné') + '</td><td><a href="' + escape(vote.source) + '">Scrutin ' + number + ' ↗</a></td></tr>';
-      }).join('') + '</tbody></table>';
-    }
-    function filterActors() {
-      const previous = byId('actor-choice').value;
-      const terms = norm(byId('actor-search').value).split(' ').filter(Boolean);
-      const ids = Object.keys(data.actors).filter(id => {
-        const [name,,department,circ] = data.actors[id];
-        return terms.every(term => norm(name+' '+department+' '+circ).includes(term));
-      }).sort((a,b) => namesOrder.compare(data.actors[a][0],data.actors[b][0]));
-      byId('actor-choice').innerHTML = ids.map(id => '<option value="' + escape(id) + '">' + escape(data.actors[id][0]+' · '+data.actors[id][2]+' · circ. '+data.actors[id][3]) + '</option>').join('');
-      if (ids.includes(previous)) byId('actor-choice').value = previous;
-      byId('actor-count').textContent = ids.length + ' député(s) dans l’annuaire de cette édition';
-      renderActor();
-    }
-    byId('actor-search').addEventListener('input',filterActors);
-    byId('actor-choice').addEventListener('change',renderActor);
-    filterActors();
     chooseVote('8775');
     renderScene(0);
     document.documentElement.classList.remove('no-js');
