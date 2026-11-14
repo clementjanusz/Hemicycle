@@ -1,0 +1,1156 @@
+/* ==========================================================================
+   Lisière · « Poser une question »
+   Feuille de style du module chatbot (frontend/chatbot/), chargée par
+   chatbot.js. Elle reprend l'identité du dossier « Après les flammes » :
+   papier crème, encre vert-noir, rouille, surtitres capitales espacées,
+   titres serif très serrés, filets fins, angles vifs.
+
+   Autonome : elle ne dépend de rien dans la page.
+   - Les variables du site sont lues AVEC valeur de repli.
+   - box-sizing, marges, polices et focus sont posés ici, sans reset.
+   - Toutes les règles visent des classes cb-, sauf .cb-surligne (posée
+     5 s sur une section de la page) et html.cb-ouvert.
+   ========================================================================== */
+
+
+/* ---------- Jetons --------------------------------------------------------- */
+
+.cb-lanceur,
+.cb-panneau {
+  --cb-encre: var(--ink, #202821);
+  --cb-papier: var(--paper, #f4efe5);
+  --cb-doux: var(--soft, #e5ddce);
+  --cb-terne: var(--dull, #5d6357);
+  --cb-rouille: var(--rust, #a53d28);
+  --cb-peche: var(--peach, #f4a788);
+  --cb-feu: var(--fire, #be4f36);
+  --cb-vert: var(--green, #2c6756);
+  --cb-ambre: var(--amber, #a67733);
+  --cb-ambre-texte: #7a5220;   /* ambre assombri : contraste AA en petit corps */
+  --cb-ambre-fond: #f3e6cf;
+  --cb-erreur-fond: #f6e2d8;
+  --cb-scene: #eee7d9;         /* fond du cadre illustré (.stage) du site */
+  --cb-filet: #d6cbbc;
+  --cb-filet-doux: #e2d9ca;
+  --cb-champ: #fffdf6;
+  --cb-bord-champ: #a59b8e;
+  --cb-survol: #eae0d1;
+  --cb-focus: #a85436;
+  --cb-serif: var(--serif, "Instrument Serif", Georgia, serif);
+  --cb-sans: var(--sans, "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif);
+}
+
+
+/* ---------- Socle : aucun reset de la page n'est supposé ------------------- */
+
+.cb-lanceur,
+.cb-lanceur *,
+.cb-lanceur *::before,
+.cb-lanceur *::after,
+.cb-panneau,
+.cb-panneau *,
+.cb-panneau *::before,
+.cb-panneau *::after {
+  box-sizing: border-box;
+}
+
+.cb-lanceur,
+.cb-panneau {
+  font-family: var(--cb-sans);
+  font-style: normal;
+  font-weight: 400;
+  letter-spacing: normal;
+  word-spacing: normal;
+  text-align: left;
+  text-indent: 0;
+  text-transform: none;
+  text-shadow: none;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* L'attribut hidden l'emporte toujours, même sur les display posés plus bas. */
+.cb-lanceur[hidden],
+.cb-panneau[hidden],
+.cb-panneau [hidden] {
+  display: none !important;
+}
+
+.cb-panneau :focus-visible {
+  outline: 3px solid var(--cb-focus);
+  outline-offset: 2px;
+}
+
+.cb-panneau [tabindex="-1"]:focus {
+  outline: none;
+}
+
+
+/* ---------- Lanceur -------------------------------------------------------- */
+
+.cb-lanceur {
+  position: fixed;
+  right: 20px;
+  right: max(20px, env(safe-area-inset-right));
+  bottom: 20px;
+  bottom: max(20px, env(safe-area-inset-bottom));
+  z-index: 1000;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  width: auto;
+  min-width: 44px;
+  height: 48px;
+  margin: 0;
+  padding: 0 18px 0 14px;
+  border: 0;
+  border-radius: 0;
+  background: var(--cb-encre);
+  color: var(--cb-papier);
+  font: 750 14px/1 var(--cb-sans);
+  letter-spacing: .01em;
+  white-space: nowrap;
+  /* liseré papier : le bouton reste détouré sur la couverture sombre */
+  box-shadow: 0 0 0 1px #f4efe566, 0 14px 30px -12px #322216a6, 0 2px 6px #3222162e;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color .18s ease, transform .18s ease;
+}
+
+.cb-lanceur:hover {
+  background: var(--cb-rouille);
+}
+
+.cb-lanceur:active {
+  transform: translateY(1px);
+}
+
+.cb-lanceur:focus-visible {
+  outline: 3px solid var(--cb-focus);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 3px var(--cb-papier), 0 14px 30px -12px #322216a6;
+}
+
+/* Panneau ouvert : il recouvre le lanceur, dont l'ombre ne doit pas dépasser. */
+.cb-lanceur[aria-expanded="true"] {
+  box-shadow: none;
+}
+
+/* Bulle pêche avec un « ? » serif italique : écho du point du logo Lisière. */
+.cb-lanceur-icone {
+  position: relative;
+  flex: none;
+  display: block;
+  width: 22px;
+  height: 19px;
+  margin: -5px 0 0;
+  background: var(--cb-peche);
+}
+
+.cb-lanceur-icone::before {
+  content: "?";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-top: 1px;
+  color: var(--cb-encre);
+  font: italic 400 16px/1 var(--cb-serif);
+}
+
+.cb-lanceur-icone::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 3px;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 6px 7px 0 0;
+  border-color: var(--cb-peche) transparent transparent transparent;
+}
+
+.cb-lanceur-texte {
+  display: inline-block;
+}
+
+
+/* ---------- Panneau -------------------------------------------------------- */
+
+.cb-panneau {
+  position: fixed;
+  right: 20px;
+  right: max(20px, env(safe-area-inset-right));
+  bottom: 20px;
+  bottom: max(20px, env(safe-area-inset-bottom));
+  z-index: 1001;
+  width: min(408px, calc(100vw - 40px));
+  height: min(680px, calc(100vh - 40px));
+  height: min(680px, calc(100dvh - 40px));
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid #cfc2b1;
+  border-radius: 0;
+  background: var(--cb-papier);
+  color: var(--cb-encre);
+  font-size: 15px;
+  line-height: 1.55;
+  box-shadow: 0 30px 60px -24px #32221673, 0 4px 12px #3222161f;
+}
+
+.cb-panneau:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  animation: cb-entree .26s cubic-bezier(.2, .7, .2, 1) both;
+}
+
+@keyframes cb-entree {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: none; }
+}
+
+
+/* ---------- En-tête : bandeau encre, comme la couverture ------------------- */
+
+.cb-entete {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin: 0;
+  padding: 8px 8px 8px 20px;
+  overflow: hidden;
+  background: var(--cb-encre);
+  color: var(--cb-papier);
+}
+
+/* Anneaux concentriques : désactivés (version minimaliste). */
+.cb-entete::before {
+  display: none;
+  content: "";
+  position: absolute;
+  top: -170px;
+  right: -130px;
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  opacity: .32;
+  background: repeating-radial-gradient(ellipse at 55% 60%, transparent 0 13px, #a9634e 14px 15px, transparent 16px 23px);
+  -webkit-mask-image: linear-gradient(120deg, transparent 18%, #000 85%);
+  mask-image: linear-gradient(120deg, transparent 18%, #000 85%);
+  pointer-events: none;
+}
+
+.cb-entete > * {
+  position: relative;
+  min-width: 0;
+}
+
+.cb-surtitre {
+  margin: 0 0 8px;
+  padding: 0;
+  color: var(--cb-peche);
+  font: 750 11px/1.4 var(--cb-sans);
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+
+.cb-titre {
+  margin: 0;
+  padding: 0;
+  color: var(--cb-papier);
+  font: 400 22px/1 var(--cb-serif);
+  letter-spacing: -.03em;
+  text-transform: none;
+}
+
+.cb-fermer {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin: -4px 0 0;
+  padding: 0 0 4px;
+  border: 1px solid #f4efe54d;
+  border-radius: 0;
+  background: transparent;
+  color: var(--cb-papier);
+  font: 400 30px/1 var(--cb-serif);
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  transition: background-color .18s ease, border-color .18s ease;
+}
+
+.cb-fermer:hover {
+  border-color: var(--cb-papier);
+  background: #f4efe51f;
+}
+
+.cb-entete :focus-visible {
+  outline-color: var(--cb-peche);
+}
+
+
+/* ---------- Fil ------------------------------------------------------------ */
+
+.cb-fil {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin: 0;
+  padding: 20px 20px 18px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #cfc2b1 transparent;
+}
+
+.cb-fil > * {
+  flex: none;
+}
+
+.cb-fil p {
+  margin: 0;
+  padding: 0;
+}
+
+
+/* ---------- Accueil et suggestions ----------------------------------------- */
+
+.cb-accueil {
+  display: grid;
+  gap: 18px;
+  margin: 0;
+}
+
+/* Le texte d'accueil se lit comme un chapô, en serif. */
+.cb-accueil > p {
+  color: var(--cb-terne);
+  font: 400 15px/1.4 var(--cb-sans);
+}
+
+.cb-suggestions {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  border-top: 1px solid var(--cb-filet);
+}
+
+.cb-suggestion {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin: 0;
+  padding: 11px 36px 11px 0;
+  border: 0;
+  border-bottom: 1px solid var(--cb-filet);
+  border-radius: 0;
+  background: transparent;
+  color: var(--cb-encre);
+  font: 600 14px/1.35 var(--cb-sans);
+  text-align: left;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  transition: color .18s ease;
+}
+
+.cb-suggestion::after {
+  content: "→";
+  content: "→" / "";
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  color: var(--cb-rouille);
+  font-weight: 400;
+  transform: translateY(-50%);
+  transition: transform .18s ease;
+}
+
+.cb-suggestion:hover {
+  color: var(--cb-rouille);
+}
+
+.cb-suggestion:hover::after {
+  transform: translate(3px, -50%);
+}
+
+
+/* ---------- Messages ------------------------------------------------------- */
+
+.cb-msg {
+  min-width: 0;
+  margin: 0;
+  color: var(--cb-encre);
+  overflow-wrap: break-word;
+}
+
+.cb-msg p + p {
+  margin-top: .6em;
+}
+
+/* Question du lecteur : serif, calée à droite, sur fond « soft »,
+   avec le filet rouille des encadrés du récit. */
+.cb-msg--lecteur {
+  align-self: flex-end;
+  max-width: 88%;
+  margin-left: auto;
+  padding: 10px 14px 11px;
+  border-right: 3px solid var(--cb-rouille);
+  background: var(--cb-doux);
+  font: 400 19px/1.22 var(--cb-serif);
+  letter-spacing: -.015em;
+}
+
+.cb-msg--lecteur + .cb-msg--reponse,
+.cb-msg--lecteur + .cb-etape {
+  margin-top: -2px;
+}
+
+.cb-msg--reponse + .cb-msg--lecteur,
+.cb-msg--erreur + .cb-msg--lecteur,
+.cb-msg--info + .cb-msg--lecteur {
+  margin-top: 8px;
+}
+
+/* Réponse : texte courant du dossier, ouvert par un court trait de feu. */
+.cb-msg--reponse {
+  display: grid;
+  gap: 14px;
+  padding: 0 0 20px;
+  border-bottom: 1px solid var(--cb-filet);
+}
+
+.cb-msg--reponse::before {
+  content: "";
+  display: block;
+  width: 28px;
+  height: 3px;
+  margin-bottom: -2px;
+  background: var(--cb-feu);
+}
+
+.cb-texte {
+  min-width: 0;
+  color: var(--cb-encre);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.cb-texte p,
+.cb-texte ul,
+.cb-texte ol {
+  margin: 0 0 .7em;
+  padding: 0;
+}
+
+.cb-texte > :last-child {
+  margin-bottom: 0;
+}
+
+.cb-texte ul,
+.cb-texte ol {
+  list-style: none;
+}
+
+.cb-texte li {
+  position: relative;
+  margin: 0 0 .35em;
+  padding: 0 0 0 18px;
+}
+
+.cb-texte li:last-child {
+  margin-bottom: 0;
+}
+
+/* Puces carrées, comme les pastilles de légende de la carte. */
+.cb-texte ul > li::before {
+  content: "";
+  position: absolute;
+  top: calc(.775em - 3.5px);
+  left: 1px;
+  width: 7px;
+  height: 7px;
+  background: var(--cb-feu);
+}
+
+.cb-texte ol {
+  counter-reset: cb-puce;
+}
+
+.cb-texte ol > li {
+  counter-increment: cb-puce;
+  padding-left: 22px;
+}
+
+.cb-texte ol > li::before {
+  content: counter(cb-puce) ".";
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: var(--cb-rouille);
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.cb-texte strong,
+.cb-texte b {
+  font-weight: 750;
+}
+
+.cb-texte em {
+  font-style: italic;
+}
+
+.cb-texte a {
+  color: var(--cb-rouille);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+/* Messages courts du système (« Question annulée. ») */
+.cb-msg--info {
+  align-self: center;
+  max-width: 100%;
+  color: var(--cb-terne);
+  font: italic 400 15px/1.35 var(--cb-serif);
+  text-align: center;
+}
+
+/* Erreur : encadré pêche pâle, filet rouille, pastille « ! ». */
+.cb-msg--erreur {
+  position: relative;
+  padding: 11px 14px 12px 42px;
+  border-left: 3px solid var(--cb-rouille);
+  background: var(--cb-erreur-fond);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.cb-msg--erreur::before {
+  content: "!";
+  content: "!" / "";
+  position: absolute;
+  top: 12px;
+  left: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  background: var(--cb-rouille);
+  color: var(--cb-papier);
+  font: 750 12px/1 var(--cb-sans);
+}
+
+
+/* ---------- Lien « Voir la section » --------------------------------------- */
+
+.cb-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+}
+
+.cb-lien-section {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  min-height: 32px;
+  margin: 0;
+  padding: 4px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--cb-rouille);
+  font: 750 13px/1.25 var(--cb-sans);
+  text-decoration: none;
+  transition: background-color .18s ease, color .18s ease;
+}
+
+/* Même flèche que les renvois internes du récit (« Explorer le vote ↓ »). */
+.cb-lien-section::after {
+  content: "↓";
+  content: "↓" / "";
+  flex: none;
+  font-weight: 400;
+  transition: transform .18s ease;
+}
+
+.cb-lien-section:hover {
+  background: var(--cb-rouille);
+  color: var(--cb-papier);
+}
+
+.cb-lien-section:hover::after {
+  transform: translateY(2px);
+}
+
+
+/* ---------- Sources -------------------------------------------------------- */
+
+.cb-sources {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* Sources repliées dans un <details> : un simple libellé « Sources (n) » cliquable. */
+.cb-sources-titre {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  margin: 0;
+  color: var(--cb-terne);
+  font: 750 10.5px/1.4 var(--cb-sans);
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  cursor: pointer;
+  list-style: none;
+}
+
+.cb-sources-titre::-webkit-details-marker {
+  display: none;
+}
+
+.cb-sources-titre::after {
+  content: "+";
+  font: 400 15px/1 var(--cb-sans);
+  letter-spacing: 0;
+}
+
+.cb-sources[open] > .cb-sources-titre::after {
+  content: "−";
+}
+
+.cb-sources-titre:hover {
+  color: var(--cb-encre);
+}
+
+.cb-sources ul {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--cb-filet-doux);
+}
+
+.cb-source {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-height: 44px;
+  margin: 0;
+  padding: 9px 4px 10px;
+  border-bottom: 1px solid var(--cb-filet-doux);
+  list-style: none;
+  transition: background-color .18s ease;
+}
+
+.cb-source:last-child {
+  border-bottom: 0;
+}
+
+.cb-source a,
+.cb-source-libelle {
+  max-width: 100%;
+  color: var(--cb-encre);
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.cb-source a {
+  text-decoration: underline;
+  text-decoration-color: var(--cb-bord-champ);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+/* Toute la ligne de la source est cliquable : cible tactile ≥ 44 px. */
+.cb-source a::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+}
+
+.cb-source a[target="_blank"]::after {
+  content: " ↗";
+  content: " ↗" / "";
+  white-space: nowrap;
+}
+
+/* Survol seulement si la ligne porte un lien (pas sur .cb-source-libelle). */
+.cb-source:has(> a):hover {
+  background: var(--cb-survol);
+}
+
+.cb-source:hover a {
+  text-decoration-color: currentColor;
+}
+
+.cb-meta {
+  color: var(--cb-terne);
+  font-size: 12px;
+}
+
+/* Badges : vérifié (aplat vert + coche) / non vérifié (pointillé ambre). */
+.cb-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  margin: 2px 0 0;
+  padding: 3px 7px 3px 6px;
+  border: 1px solid transparent;
+  border-radius: 0;
+  font: 750 10.5px/1.3 var(--cb-sans);
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+
+.cb-badge::before {
+  content: "";
+  flex: none;
+  display: block;
+}
+
+.cb-badge--verifie {
+  border-color: var(--cb-vert);
+  background: var(--cb-vert);
+  color: var(--cb-papier);
+}
+
+.cb-badge--verifie::before {
+  width: 9px;
+  height: 5px;
+  margin: -3px 1px 0;
+  border: solid currentColor;
+  border-width: 0 0 2px 2px;
+  transform: rotate(-45deg);
+}
+
+.cb-badge--non-verifie {
+  border: 1px dashed var(--cb-ambre);
+  background: var(--cb-ambre-fond);
+  color: var(--cb-ambre-texte);
+}
+
+.cb-badge--non-verifie::before {
+  width: 7px;
+  height: 7px;
+  border: 1.5px solid currentColor;
+}
+
+
+/* ---------- Étape en cours ------------------------------------------------- */
+
+.cb-etape {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  margin: 0;
+  color: var(--cb-terne);
+}
+
+/* Indicateur : une mini barre de progression, comme celle du haut de page. */
+.cb-indicateur {
+  position: relative;
+  flex: none;
+  display: block;
+  width: 32px;
+  height: 3px;
+  overflow: hidden;
+  background: #d9ccbb;
+}
+
+.cb-indicateur::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 12px;
+  background: var(--cb-feu);
+  animation: cb-balaye 1.15s cubic-bezier(.45, 0, .55, 1) infinite;
+}
+
+@keyframes cb-balaye {
+  from { transform: translateX(-12px); }
+  to   { transform: translateX(32px); }
+}
+
+.cb-etape-texte {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: italic 400 16px/1.3 var(--cb-serif);
+}
+
+.cb-annuler {
+  flex: none;
+  min-width: 44px;
+  min-height: 44px;
+  margin: 0 -10px 0 0;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--cb-rouille);
+  font: 750 13px/1 var(--cb-sans);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  transition: background-color .18s ease;
+}
+
+.cb-annuler:hover {
+  background: var(--cb-survol);
+}
+
+
+/* ---------- Formulaire ----------------------------------------------------- */
+
+.cb-formulaire {
+  position: relative;
+  flex: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  margin: 0;
+  padding: 14px 20px 10px;
+  border-top: 1px solid var(--cb-filet);
+  background: var(--cb-scene);
+}
+
+/* Question en cours : un trait de feu balaie le haut du formulaire. */
+.cb-panneau[aria-busy="true"] .cb-formulaire::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  right: 0;
+  left: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--cb-feu) 50%, transparent) no-repeat;
+  background-size: 40% 100%;
+  animation: cb-balayage 1.6s linear infinite;
+}
+
+@keyframes cb-balayage {
+  from { background-position: -70% 0; }
+  to   { background-position: 170% 0; }
+}
+
+.cb-label {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  margin: -1px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+  clip-path: inset(50%) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.cb-saisie {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  min-height: 66px;
+  max-height: 160px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--cb-bord-champ);
+  border-radius: 0;
+  background: var(--cb-champ);
+  color: var(--cb-encre);
+  font: 400 16px/1.4 var(--cb-sans);   /* 16 px : pas de zoom auto sur iOS */
+  letter-spacing: normal;
+  box-shadow: none;
+  resize: none;
+  field-sizing: content;
+  -webkit-appearance: none;
+  appearance: none;
+  transition: border-color .18s ease;
+}
+
+.cb-saisie::placeholder {
+  color: var(--cb-terne);
+  opacity: 1;
+}
+
+.cb-saisie:hover:not(:disabled) {
+  border-color: var(--cb-terne);
+}
+
+.cb-panneau .cb-saisie:focus-visible {
+  border-color: var(--cb-encre);
+  outline: 3px solid var(--cb-focus);
+  outline-offset: 2px;
+}
+
+.cb-saisie:disabled {
+  background: #f3eee4;
+  color: var(--cb-terne);
+  -webkit-text-fill-color: var(--cb-terne);
+  opacity: 1;
+  cursor: progress;
+}
+
+.cb-envoyer {
+  align-self: stretch;
+  min-width: 44px;
+  min-height: 48px;
+  margin: 0;
+  padding: 0 16px;
+  border: 1px solid var(--cb-encre);
+  border-radius: 0;
+  background: var(--cb-encre);
+  color: var(--cb-papier);
+  font: 750 13px/1 var(--cb-sans);
+  letter-spacing: .02em;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  transition: background-color .18s ease, border-color .18s ease;
+}
+
+.cb-envoyer:hover:not(:disabled) {
+  border-color: var(--cb-rouille);
+  background: var(--cb-rouille);
+}
+
+.cb-envoyer:disabled {
+  border-color: #cfc2b1;
+  background: #cfc2b1;
+  color: #474c43;
+  cursor: progress;
+}
+
+.cb-mention {
+  flex: none;
+  margin: 0;
+  padding: 0 20px 12px;
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  background: var(--cb-scene);
+  color: var(--cb-terne);
+  font: 400 11.5px/1.4 var(--cb-sans);
+}
+
+
+/* ---------- Section de la page pointée par le chatbot ---------------------- */
+
+/* Générique (ne suppose aucune classe de la page) : un encadré de presse,
+   aplat pêche pâle qui déborde de 12 px, coiffé d'un filet de feu (celui de
+   la barre de progression). Tout passe par des ombres portées : rien ne
+   bouge dans la mise en page ni dans le positionnement (sticky compris), et
+   le filet reste visible sur une section pleine largeur.
+   Apparaît, tient, puis s'efface sur les 5 s où la classe est posée. */
+.cb-surligne {
+  box-shadow: inset 0 0 0 100vmax #f5e3d5, 0 0 0 12px #f5e3d5, 0 -3px 0 12px var(--fire, #be4f36);
+  animation: cb-surligne 5s ease both;
+}
+
+@keyframes cb-surligne {
+  0% {
+    box-shadow: inset 0 0 0 100vmax #f5e3d500, 0 0 0 12px #f5e3d500, 0 -3px 0 12px #be4f3600;
+  }
+  8%, 74% {
+    box-shadow: inset 0 0 0 100vmax #f5e3d5, 0 0 0 12px #f5e3d5, 0 -3px 0 12px var(--fire, #be4f36);
+  }
+  100% {
+    box-shadow: inset 0 0 0 100vmax #f5e3d500, 0 0 0 12px #f5e3d500, 0 -3px 0 12px #be4f3600;
+  }
+}
+
+/* Spécificité nulle : un scroll-margin-top déjà prévu par la page (étapes
+   sous la scène sticky) garde la priorité. */
+:where(.cb-surligne) {
+  scroll-margin-top: 24px;
+}
+
+
+/* ---------- Petits écrans : lanceur compact, panneau plein écran ----------- */
+
+@media (max-width: 760px) {
+  .cb-lanceur {
+    right: 14px;
+    right: max(14px, env(safe-area-inset-right));
+    bottom: 14px;
+    bottom: max(14px, env(safe-area-inset-bottom));
+    justify-content: center;
+    gap: 0;
+    width: 52px;
+    height: 52px;
+    padding: 0;
+  }
+
+  .cb-lanceur-icone {
+    margin-top: -4px;
+  }
+
+  /* Le libellé reste le nom accessible du bouton. */
+  .cb-lanceur-texte {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .cb-panneau {
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: auto;
+    height: auto;
+    border: 0;
+    box-shadow: none;
+  }
+
+  .cb-entete {
+    padding: 6px 6px 6px 16px;
+    padding-top: max(6px, env(safe-area-inset-top));
+  }
+
+  .cb-titre {
+    font-size: 21px;
+  }
+
+  .cb-fil {
+    padding: 18px 16px 16px;
+  }
+
+  .cb-msg--lecteur {
+    max-width: 92%;
+  }
+
+  .cb-formulaire {
+    padding: 10px 16px 8px;
+  }
+
+  .cb-envoyer {
+    padding: 0 14px;
+  }
+
+  .cb-mention {
+    padding: 0 16px 10px;
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+    font-size: 11px;
+  }
+
+  /* Le panneau couvre l'écran : la page ne défile plus derrière. */
+  html.cb-ouvert {
+    overflow: hidden;
+  }
+}
+
+
+/* ---------- Mouvement réduit ----------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .cb-lanceur,
+  .cb-lanceur *,
+  .cb-lanceur *::before,
+  .cb-lanceur *::after,
+  .cb-panneau,
+  .cb-panneau *,
+  .cb-panneau *::before,
+  .cb-panneau *::after,
+  .cb-surligne {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .cb-indicateur::before {
+    transform: translateX(10px);
+  }
+
+  .cb-panneau[aria-busy="true"] .cb-formulaire::before {
+    background-position: 50% 0;
+  }
+}
+
+
+/* ---------- Contrastes forcés et impression -------------------------------- */
+
+@media (forced-colors: active) {
+  .cb-lanceur,
+  .cb-panneau,
+  .cb-msg--lecteur,
+  .cb-msg--erreur,
+  .cb-lien-section,
+  .cb-badge,
+  .cb-envoyer {
+    border: 1px solid CanvasText;
+  }
+
+  .cb-lanceur-icone,
+  .cb-indicateur::before,
+  .cb-texte ul > li::before,
+  .cb-msg--reponse::before {
+    forced-color-adjust: none;
+    background: CanvasText;
+  }
+
+  .cb-lanceur-icone::before {
+    color: Canvas;
+  }
+
+  .cb-lanceur-icone::after {
+    border-top-color: CanvasText;
+  }
+
+  .cb-surligne {
+    outline: 3px solid Highlight;
+    outline-offset: 8px;
+  }
+}
+
+@media print {
+  .cb-lanceur,
+  .cb-panneau {
+    display: none !important;
+  }
+
+  .cb-surligne {
+    box-shadow: none !important;
+  }
+}
